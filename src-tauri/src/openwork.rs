@@ -10,6 +10,10 @@ const SHORT_TIMEOUT: Duration = Duration::from_secs(120);
 #[cfg(any(target_os = "macos", test))]
 const OPENWORK_APP: &str = "OpenWork.app";
 const OPENWORK_EXE: &str = "OpenWork.exe";
+#[cfg(any(target_os = "linux", test))]
+const OPENWORK_APPIMAGE: &str = "OpenWork.AppImage";
+#[cfg(any(target_os = "linux", test))]
+pub const OPENWORK_DESKTOP_NAME: &str = "openwork.desktop";
 #[cfg(any(windows, test))]
 const OPENWORK_PRODUCT_NAME: &str = "openwork";
 /// Install directory name of the electron-builder NSIS per-user build.
@@ -87,7 +91,7 @@ pub async fn install_openwork(app: tauri::AppHandle) -> Result<InstallResult, Ap
     })?;
 
     let dir = util::temp_dir("openwork")?;
-    let outcome = install_into(&client, &release, asset, platform, &dir, &log).await;
+    let outcome = install_into(&client, &release, asset, &dir, &log).await;
     util::remove_dir(&dir);
     outcome?;
 
@@ -134,6 +138,15 @@ fn launch_blocking() -> Result<(), AppError> {
                 .map_err(|e| AppError::io(format!("cannot launch OpenWork: {e}")))?;
             Ok(())
         }
+        "linux" => {
+            let path = status
+                .path
+                .ok_or_else(|| AppError::new("unsupported", "OpenWork is not installed"))?;
+            Command::new(path)
+                .spawn()
+                .map_err(|e| AppError::io(format!("cannot launch OpenWork: {e}")))?;
+            Ok(())
+        }
         other => Err(AppError::new(
             "unsupported",
             format!("cannot launch OpenWork on {other}"),
@@ -153,10 +166,10 @@ async fn install_into(
     client: &reqwest::Client,
     release: &Release,
     asset: &Asset,
-    platform: &str,
     dir: &Path,
     log: &Logger,
 ) -> Result<(), AppError> {
+    let platform = util::platform();
     let installer = dir.join(
         Path::new(&asset.name)
             .file_name()
@@ -170,10 +183,7 @@ async fn install_into(
     util::download_to(client, &asset.url, &installer, log).await?;
 
     log.log("verifying the download");
-    let metadata = match platform {
-        "macos" => "latest-mac.yml",
-        _ => "latest.yml",
-    };
+    let metadata = update_metadata_name(platform, util::arch());
     match release.assets.iter().find(|item| item.name == metadata) {
         Some(published) => {
             let entries = parse_latest_yml(&util::fetch_text(client, &published.url).await?);
@@ -188,9 +198,10 @@ async fn install_into(
     match platform {
         "macos" => install_dmg(&installer, log).await,
         "windows" => install_nsis(&installer, log).await,
+        "linux" => install_appimage(&installer, &release.version, log).await,
         other => Err(AppError::new(
             "unsupported",
-            format!("OpenWork installs on macOS and Windows only, this host runs {other}"),
+            format!("OpenWork installs on macOS, Windows and Linux only, this host runs {other}"),
         )),
     }
 }
@@ -254,6 +265,10 @@ fn status_blocking() -> InstallStatus {
     }
     #[cfg(windows)]
     if let Some(status) = windows_status() {
+        return status;
+    }
+    #[cfg(target_os = "linux")]
+    if let Some(status) = util::home_dir().and_then(|home| linux_status_from(&home)) {
         return status;
     }
     InstallStatus {
@@ -321,7 +336,7 @@ pub fn windows_status_from(
         .then(|| installed_at(&exe, entry.and_then(|entry| entry.version.clone())))
 }
 
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "linux", test))]
 fn installed_at(exe: &Path, version: Option<String>) -> InstallStatus {
     InstallStatus {
         installed: true,
@@ -355,6 +370,200 @@ fn registry_entries() -> Vec<UninstallEntry> {
             version: key.get_value("DisplayVersion").ok(),
         })
         .collect()
+}
+
+/// Managed Linux install: one AppImage plus a version sidecar in the user data
+/// directory, so a re-run replaces the file instead of adding a second one.
+#[cfg(any(target_os = "linux", test))]
+pub fn linux_install_dir(home: &Path) -> PathBuf {
+    home.join(".local/share/openwork")
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub fn linux_appimage_path(home: &Path) -> PathBuf {
+    linux_install_dir(home).join(OPENWORK_APPIMAGE)
+}
+
+/// Real OpenWork only: the managed AppImage, or an openwork.desktop entry that
+/// points at an existing AppImage. Our own entry carries a different file name
+/// ("EPFL OpenWork Installer.desktop"), so it never counts.
+#[cfg(any(target_os = "linux", test))]
+pub fn linux_status_from(home: &Path) -> Option<InstallStatus> {
+    let appimage = linux_appimage_path(home);
+    if appimage.is_file() {
+        return Some(installed_at(&appimage, read_version(&appimage)));
+    }
+    let entry = home
+        .join(".local/share/applications")
+        .join(OPENWORK_DESKTOP_NAME);
+    let target = PathBuf::from(desktop_exec(&std::fs::read_to_string(entry).ok()?)?);
+    (is_appimage(&target) && target.is_file()).then(|| installed_at(&target, read_version(&target)))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn is_appimage(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("appimage"))
+}
+
+/// The AppImage carries no cheaply readable version, so install writes one in a
+/// sidecar file next to it.
+#[cfg(any(target_os = "linux", test))]
+fn read_version(appimage: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(appimage.with_extension("version")).ok()?;
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_string())
+}
+
+/// The executable of a desktop entry, unquoted. A quoted value wins because a
+/// home directory can hold spaces.
+#[cfg(any(target_os = "linux", test))]
+pub fn desktop_exec(text: &str) -> Option<String> {
+    let value = text
+        .lines()
+        .find_map(|line| line.strip_prefix("Exec="))?
+        .trim();
+    let path = match value.strip_prefix('"') {
+        Some(rest) => rest.split('"').next().unwrap_or(rest),
+        None => value.split_whitespace().next().unwrap_or(value),
+    };
+    (!path.is_empty()).then(|| path.to_string())
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub fn desktop_entry(exec: &Path, icon: &str) -> String {
+    format!(
+        "[Desktop Entry]\n\
+         Type=Application\n\
+         Name=OpenWork\n\
+         Exec=\"{}\"\n\
+         Icon={icon}\n\
+         Terminal=false\n\
+         Categories=Development;\n",
+        exec.display()
+    )
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub fn pick_icon(bundled: Option<PathBuf>, extracted: Option<PathBuf>) -> String {
+    bundled
+        .or(extracted)
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "application-x-executable".to_string())
+}
+
+#[cfg(target_os = "linux")]
+async fn install_appimage(appimage: &Path, version: &str, log: &Logger) -> Result<(), AppError> {
+    let home = util::home_dir()
+        .ok_or_else(|| AppError::io("cannot find the home directory of the user"))?;
+    let dir = linux_install_dir(&home);
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| AppError::io(format!("cannot create {}: {e}", dir.display())))?;
+
+    let target = linux_appimage_path(&home);
+    log.log(format!(
+        "installing the OpenWork AppImage to {}",
+        target.display()
+    ));
+    // Copy, not rename: the download lives in /tmp, usually another filesystem.
+    let _ = std::fs::remove_file(&target);
+    std::fs::copy(appimage, &target)
+        .map_err(|e| AppError::io(format!("cannot write {}: {e}", target.display())))?;
+    set_executable(&target)?;
+    write_version(&target, version)?;
+
+    // No OpenWork icon ships as a bundled resource yet, so the AppImage is the
+    // only source. Pass the resource path as `bundled` when the bundler copies
+    // one next to the binary.
+    let icon_source = target.clone();
+    let icon_dir = dir.clone();
+    let extracted = util::spawn_blocking(move || extract_icon(&icon_source, &icon_dir))
+        .await
+        .ok()
+        .flatten();
+    let icon = pick_icon(None, extracted);
+
+    let applications = home.join(".local/share/applications");
+    std::fs::create_dir_all(&applications)
+        .map_err(|e| AppError::io(format!("cannot create {}: {e}", applications.display())))?;
+    let entry = applications.join(OPENWORK_DESKTOP_NAME);
+    std::fs::write(&entry, desktop_entry(&target, &icon))
+        .map_err(|e| AppError::io(format!("cannot write {}: {e}", entry.display())))?;
+    log.log(format!(
+        "added the OpenWork menu entry at {}",
+        entry.display()
+    ));
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn set_executable(path: &Path) -> Result<(), AppError> {
+    use std::os::unix::fs::PermissionsExt as _;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+        .map_err(|e| AppError::io(format!("cannot make {} executable: {e}", path.display())))
+}
+
+#[cfg(target_os = "linux")]
+fn write_version(appimage: &Path, version: &str) -> Result<(), AppError> {
+    let path = appimage.with_extension("version");
+    std::fs::write(&path, format!("{version}\n"))
+        .map_err(|e| AppError::io(format!("cannot write {}: {e}", path.display())))
+}
+
+/// Electron AppImages embed their icon. The largest png wins and is copied next
+/// to the AppImage, so the desktop entry never points into a temp directory.
+#[cfg(target_os = "linux")]
+fn extract_icon(appimage: &Path, dir: &Path) -> Option<PathBuf> {
+    use std::process::Stdio;
+    use std::time::Instant;
+
+    let scratch = util::temp_dir("openwork-icon").ok()?;
+    let mut child = Command::new(appimage)
+        .arg("--appimage-extract")
+        .arg("*.png")
+        .current_dir(&scratch)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let deadline = Instant::now() + SHORT_TIMEOUT;
+    while matches!(child.try_wait(), Ok(None)) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+
+    let mut found = Vec::new();
+    png_files(&scratch.join("squashfs-root"), &mut found);
+    found.sort();
+    let source = found
+        .into_iter()
+        .max_by_key(|path| std::fs::metadata(path).map(|item| item.len()).unwrap_or(0));
+    let icon = source.and_then(|source| {
+        let dest = dir.join("openwork.png");
+        std::fs::copy(source, &dest).ok().map(|_| dest)
+    });
+    util::remove_dir(&scratch);
+    icon
+}
+
+#[cfg(target_os = "linux")]
+fn png_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            png_files(&path, out);
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("png"))
+        {
+            out.push(path);
+        }
+    }
 }
 
 #[cfg(any(target_os = "macos", test))]
@@ -391,11 +600,24 @@ pub fn select_asset<'a>(assets: &'a [Asset], platform: &str, arch: &str) -> Opti
         ("macos", "aarch64") => ("openwork-mac-arm64-", ".dmg"),
         ("macos", "x86_64") => ("openwork-mac-x64-", ".dmg"),
         ("windows", "x86_64") => ("openwork-win-x64-", ".exe"),
+        ("linux", "aarch64") => ("openwork-linux-arm64-", ".AppImage"),
+        ("linux", "x86_64") => ("openwork-linux-x86_64-", ".AppImage"),
         _ => return None,
     };
     assets
         .iter()
         .find(|asset| asset.name.starts_with(prefix) && asset.name.ends_with(extension))
+}
+
+/// electron-builder publishes one update metadata file per platform and, on
+/// Linux, one per architecture.
+pub fn update_metadata_name(platform: &str, arch: &str) -> &'static str {
+    match (platform, arch) {
+        ("macos", _) => "latest-mac.yml",
+        ("linux", "aarch64") => "latest-linux-arm64.yml",
+        ("linux", _) => "latest-linux.yml",
+        _ => "latest.yml",
+    }
 }
 
 pub fn parse_latest_yml(text: &str) -> Vec<(String, String)> {
@@ -634,19 +856,37 @@ mod tests {
         assert_eq!(pick("macos", "x86_64"), Some("openwork-mac-x64-0.18.63.dmg"));
         assert_eq!(pick("windows", "x86_64"), Some("openwork-win-x64-0.18.63.exe"));
         assert_eq!(pick("windows", "aarch64"), None);
-        assert_eq!(pick("linux", "x86_64"), None);
+        assert_eq!(
+            pick("linux", "x86_64"),
+            Some("openwork-linux-x86_64-0.18.63.AppImage")
+        );
+        assert_eq!(
+            pick("linux", "aarch64"),
+            Some("openwork-linux-arm64-0.18.63.AppImage")
+        );
+        assert_eq!(update_metadata_name("linux", "x86_64"), "latest-linux.yml");
+        assert_eq!(
+            update_metadata_name("linux", "aarch64"),
+            "latest-linux-arm64.yml"
+        );
+        assert_eq!(update_metadata_name("macos", "x86_64"), "latest-mac.yml");
+        assert_eq!(update_metadata_name("windows", "x86_64"), "latest.yml");
     }
 
     #[test]
     fn never_selects_the_npm_package_or_a_blockmap() {
         let release = release();
-        for platform in ["macos", "windows"] {
+        for platform in ["macos", "windows", "linux"] {
             for arch in ["aarch64", "x86_64"] {
                 if let Some(asset) = select_asset(&release.assets, platform, arch) {
                     assert!(!asset.name.contains("blockmap"));
                     assert!(!asset.name.contains("cloud"));
                     assert!(!asset.name.contains("enterprise"));
-                    assert!(asset.name.ends_with(".dmg") || asset.name.ends_with(".exe"));
+                    assert!(
+                        asset.name.ends_with(".dmg")
+                            || asset.name.ends_with(".exe")
+                            || asset.name.ends_with(".AppImage")
+                    );
                 }
             }
         }
@@ -710,5 +950,183 @@ mod tests {
             Some("0.18.63")
         );
         assert_eq!(plist_string_value(plist, "CFBundleVersion"), None);
+    }
+
+    fn appimage_entry(home: &Path, file_name: &str, exec: &Path) {
+        let dir = home.join(".local/share/applications");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(file_name), desktop_entry(exec, "openwork")).unwrap();
+    }
+
+    #[test]
+    fn installs_the_appimage_under_the_data_home() {
+        let home = scratch("appimage-path");
+        assert_eq!(
+            linux_appimage_path(&home),
+            home.join(".local/share/openwork/OpenWork.AppImage")
+        );
+    }
+
+    #[test]
+    fn builds_the_desktop_entry() {
+        let exec = Path::new("/home/tester/.local/share/openwork/OpenWork.AppImage");
+        assert_eq!(
+            desktop_entry(exec, "/usr/share/icons/openwork.png"),
+            "[Desktop Entry]\n\
+             Type=Application\n\
+             Name=OpenWork\n\
+             Exec=\"/home/tester/.local/share/openwork/OpenWork.AppImage\"\n\
+             Icon=/usr/share/icons/openwork.png\n\
+             Terminal=false\n\
+             Categories=Development;\n"
+        );
+    }
+
+    #[test]
+    fn reads_the_exec_line_of_a_desktop_entry() {
+        assert_eq!(
+            desktop_exec("[Desktop Entry]\nExec=\"/opt/My Apps/openwork.AppImage\" %U\n")
+                .as_deref(),
+            Some("/opt/My Apps/openwork.AppImage")
+        );
+        assert_eq!(
+            desktop_exec("Exec=/opt/openwork.AppImage\n").as_deref(),
+            Some("/opt/openwork.AppImage")
+        );
+        assert_eq!(desktop_exec("[Desktop Entry]\nName=OpenWork\n"), None);
+        assert_eq!(desktop_exec("Exec=\n"), None);
+    }
+
+    #[test]
+    fn detects_openwork_at_the_managed_appimage_path() {
+        let home = scratch("managed-appimage");
+        assert_eq!(linux_status_from(&home), None);
+
+        let target = linux_appimage_path(&home);
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::write(&target, b"\x7fELF").unwrap();
+        let status = linux_status_from(&home).unwrap();
+        assert!(status.installed);
+        assert_eq!(status.path, Some(target.display().to_string()));
+        assert_eq!(status.version, None);
+
+        std::fs::write(target.with_extension("version"), "0.18.63\n").unwrap();
+        assert_eq!(
+            linux_status_from(&home).unwrap().version.as_deref(),
+            Some("0.18.63")
+        );
+    }
+
+    #[test]
+    fn detects_openwork_from_a_desktop_entry() {
+        let home = scratch("desktop-entry");
+        let installed = home.join("opt/openwork.AppImage");
+        write_exe(installed.parent().unwrap(), "openwork.AppImage");
+        appimage_entry(&home, OPENWORK_DESKTOP_NAME, &installed);
+        let status = linux_status_from(&home).unwrap();
+        assert!(status.installed);
+        assert_eq!(status.path, Some(installed.display().to_string()));
+    }
+
+    #[test]
+    fn ignores_a_desktop_entry_that_points_nowhere() {
+        let home = scratch("dead-desktop-entry");
+        appimage_entry(
+            &home,
+            OPENWORK_DESKTOP_NAME,
+            &home.join("opt/gone.AppImage"),
+        );
+        assert_eq!(linux_status_from(&home), None);
+    }
+
+    #[test]
+    fn never_takes_our_own_installer_for_openwork_on_linux() {
+        let home = scratch("our-own-linux");
+        let appimage = home.join("opt/openwork.AppImage");
+        write_exe(appimage.parent().unwrap(), "openwork.AppImage");
+        appimage_entry(&home, "EPFL OpenWork Installer.desktop", &appimage);
+        assert_eq!(linux_status_from(&home), None);
+
+        let own = write_exe(&home.join("opt"), "EPFL OpenWork Installer");
+        appimage_entry(&home, OPENWORK_DESKTOP_NAME, &own);
+        assert_eq!(linux_status_from(&home), None);
+    }
+
+    #[test]
+    fn prefers_a_bundled_icon_over_the_extracted_one() {
+        let bundled = PathBuf::from("/usr/lib/openwork/openwork.png");
+        let extracted = PathBuf::from("/home/tester/.local/share/openwork/openwork.png");
+        assert_eq!(
+            pick_icon(Some(bundled.clone()), Some(extracted.clone())),
+            bundled.display().to_string()
+        );
+        assert_eq!(
+            pick_icon(None, Some(extracted.clone())),
+            extracted.display().to_string()
+        );
+        assert_eq!(pick_icon(None, None), "application-x-executable");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn extracts_the_largest_icon_and_falls_back_without_one() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let home = scratch("extract-icon");
+        let dir = home.join("install");
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let fake = home.join("fake.AppImage");
+        std::fs::write(
+            &fake,
+            "#!/bin/sh\n\
+             mkdir -p squashfs-root/usr/share/icons/hicolor/16x16/apps\n\
+             mkdir -p squashfs-root/usr/share/icons/hicolor/512x512/apps\n\
+             printf small > squashfs-root/usr/share/icons/hicolor/16x16/apps/openwork.png\n\
+             head -c 4096 /dev/zero > squashfs-root/usr/share/icons/hicolor/512x512/apps/openwork.png\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let icon = extract_icon(&fake, &dir).unwrap();
+        assert_eq!(icon, dir.join("openwork.png"));
+        assert_eq!(std::fs::metadata(&icon).unwrap().len(), 4096);
+
+        let silent = home.join("silent.AppImage");
+        std::fs::write(&silent, "#!/bin/sh\nexit 0\n").unwrap();
+        std::fs::set_permissions(&silent, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(extract_icon(&silent, &dir), None);
+    }
+
+    #[test]
+    fn parses_the_linux_update_metadata() {
+        let x64 = parse_latest_yml(
+            &std::fs::read_to_string(fixture("openwork-latest-linux.yml")).unwrap(),
+        );
+        assert_eq!(
+            expected_sha512(&x64, "openwork-linux-x86_64-0.18.63.AppImage"),
+            Some("feIvvRUesroJKflwfQDR5LlWGERm4kUlNIvLO83oJhmW3WG5vYkrUow4tHER+xY8HVBGtOLmFxcayadGr76BBA==")
+        );
+        assert_eq!(
+            expected_sha512(&x64, "openwork-linux-x64-0.18.63.AppImage"),
+            None
+        );
+
+        let arm = parse_latest_yml(
+            &std::fs::read_to_string(fixture("openwork-latest-linux-arm64.yml")).unwrap(),
+        );
+        assert_eq!(
+            expected_sha512(&arm, "openwork-linux-arm64-0.18.63.AppImage"),
+            Some("HZSBO5/lXWj88YxIJOMcItMNerNVQjDK46bqrdSeEa5cwD7JC/0VKacDBz6b4MTNhCtZ/xvAh9jfLoHw4jRUJw==")
+        );
+    }
+
+    #[test]
+    fn selects_the_plain_appimage_not_cloud_enterprise_or_a_tarball() {
+        let release = release();
+        let asset = select_asset(&release.assets, "linux", "x86_64").unwrap();
+        assert_eq!(asset.name, "openwork-linux-x86_64-0.18.63.AppImage");
+        assert!(!asset.name.contains("cloud"));
+        assert!(!asset.name.contains("enterprise"));
     }
 }

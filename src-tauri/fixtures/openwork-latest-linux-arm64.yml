@@ -1,0 +1,7 @@
+version: 0.18.63
+files:
+  - url: openwork-linux-arm64-0.18.63.AppImage
+    sha512: HZSBO5/lXWj88YxIJOMcItMNerNVQjDK46bqrdSeEa5cwD7JC/0VKacDBz6b4MTNhCtZ/xvAh9jfLoHw4jRUJw==
+    size: 328814765
+    blockMapSize: 341665
+releaseDate: '2026-10-26T23:29:58.906Z'
