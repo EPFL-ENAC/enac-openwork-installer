@@ -107,6 +107,12 @@
     "vpnLink": "Open the EPFL VPN documentation",
     "next": "Continue"
   },
+  "linux": {
+    "prereq": {
+      "missingWebkit": "webkit2gtk-4.1 is missing. OpenWork may not start. Install it with: sudo apt install libwebkit2gtk-4.1-dev",
+      "missingFuse": "libfuse2 is missing. The AppImage may not start. Install it with: sudo apt install libfuse2 (libfuse2t64 on Ubuntu 24.04)"
+    }
+  },
   "opencode": {
     "title": "OpenCode",
     "intro": "OpenCode provides the AI assistant used by OpenWork.",

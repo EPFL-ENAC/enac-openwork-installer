@@ -2,6 +2,7 @@ mod opencode;
 mod openwork;
 mod openwork_state;
 mod portal;
+mod prereq;
 mod smoke;
 mod types;
 mod util;
@@ -15,6 +16,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             opencode::opencode_status,
             opencode::install_opencode,
+            prereq::linux_prereq_status,
             openwork::openwork_status,
             openwork::install_openwork,
             openwork::launch_openwork,
