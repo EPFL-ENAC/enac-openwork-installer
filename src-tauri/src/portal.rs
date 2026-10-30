@@ -15,10 +15,70 @@ const LOGIN_WINDOW_LABEL: &str = "portal-login";
 const LOGIN_TIMEOUT_SECS: u64 = 600;
 const COOKIE_POLL_MS: u64 = 1000;
 const COOKIE_POLL_MAX_ERRORS: u32 = 15;
+// A rejected sessionid is re-probed this often, in case the portal keeps the same
+// session key across the Entra ID callback. Expressed in cookie-poll ticks.
+const SESSION_REPROBE_TICKS: u32 = 5;
 const PORTAL_HOST: &str = "portal.rcp.epfl.ch";
 
 fn is_portal_page(url: &reqwest::Url) -> bool {
     url.host_str() == Some(PORTAL_HOST) && url.path().starts_with("/aiaas")
+}
+
+// Django CSRF middleware compares the form token against the csrftoken cookie
+// by default, so requests must replay both cookies captured in the webview.
+fn session_cookie_header(sessionid: &str, csrftoken: Option<&str>) -> String {
+    match csrftoken {
+        Some(csrftoken) => format!("sessionid={sessionid}; csrftoken={csrftoken}"),
+        None => format!("sessionid={sessionid}"),
+    }
+}
+
+/// What the sign-in poller does with the cookies it just read from the window.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum PollAction {
+    /// No sessionid yet, or the current one was rejected too recently.
+    Wait,
+    /// The sessionid is new (or due for a retry): check it against the portal.
+    Verify,
+}
+
+/// Login gate for the sign-in window.
+///
+/// The portal mints an anonymous `sessionid` on its redirect to Entra ID, before the
+/// user types anything, so the presence of the cookie proves nothing. The session
+/// only counts once `GET /aiaas/keys` answers a portal page with that cookie.
+#[derive(Debug, Default)]
+pub(crate) struct LoginTracker {
+    probed: Option<String>,
+    retry_in: u32,
+}
+
+impl LoginTracker {
+    pub(crate) fn on_cookies(&mut self, sessionid: Option<&str>) -> PollAction {
+        let Some(sessionid) = sessionid else {
+            return PollAction::Wait;
+        };
+        if self.probed.as_deref() == Some(sessionid) && self.retry_in > 0 {
+            self.retry_in -= 1;
+            return PollAction::Wait;
+        }
+        self.probed = Some(sessionid.to_string());
+        self.retry_in = SESSION_REPROBE_TICKS;
+        PollAction::Verify
+    }
+}
+
+/// True only for a signed-in portal session: the keys page answers 200 for a logged-in
+/// user and a 302 to /accounts/login for the anonymous session that already owns a
+/// cookie. Redirects stay off so a probe never pulls the Entra ID page.
+async fn session_is_authenticated(client: &reqwest::Client, cookie_header: &str) -> bool {
+    client
+        .get(format!("{PORTAL_BASE}{KEYS_PATH}"))
+        .header(reqwest::header::COOKIE, cookie_header)
+        .send()
+        .await
+        .map(|response| response.status().is_success())
+        .unwrap_or(false)
 }
 
 // Security: sessionid, csrf, and token live here in memory only. Never log them,
@@ -77,15 +137,13 @@ impl PortalState {
         session.csrftoken = csrftoken.map(str::to_string);
     }
 
-    // Django CSRF middleware compares the form token against the csrftoken cookie
-    // by default, so requests must replay both cookies captured in the webview.
     fn cookie_header(&self) -> Option<String> {
         let session = self.lock();
         let sessionid = session.sessionid.as_deref()?;
-        Some(match session.csrftoken.as_deref() {
-            Some(csrftoken) => format!("sessionid={sessionid}; csrftoken={csrftoken}"),
-            None => format!("sessionid={sessionid}"),
-        })
+        Some(session_cookie_header(
+            sessionid,
+            session.csrftoken.as_deref(),
+        ))
     }
 
     fn set_form(&self, csrf: &str, csrftoken: Option<&str>, form_url: &str, units: &[String]) {
@@ -137,6 +195,7 @@ pub async fn portal_start_login<R: tauri::Runtime>(
     let login_url: tauri::Url = format!("{PORTAL_BASE}{KEYS_PATH}")
         .parse()
         .map_err(|error| AppError::new("parse", format!("The portal URL is invalid: {error}")))?;
+    let probe_client = portal_client(reqwest::redirect::Policy::none())?;
     if let Some(existing) = app.get_webview_window(LOGIN_WINDOW_LABEL) {
         let _ = existing.destroy();
     }
@@ -159,6 +218,7 @@ pub async fn portal_start_login<R: tauri::Runtime>(
     tauri::async_runtime::spawn(async move {
         let deadline = Instant::now() + Duration::from_secs(LOGIN_TIMEOUT_SECS);
         let mut cookie_errors = 0u32;
+        let mut tracker = LoginTracker::default();
         loop {
             tokio::time::sleep(Duration::from_millis(COOKIE_POLL_MS)).await;
             if login_state.login_generation() != generation {
@@ -214,17 +274,27 @@ pub async fn portal_start_login<R: tauri::Runtime>(
                 .iter()
                 .map(|cookie| format!("{}={}", cookie.name(), cookie.value()))
                 .collect();
-            if let Some(sessionid) = extract_sessionid(&cookie_strings) {
-                if login_state.login_generation() == generation {
-                    login_state.set_session(
-                        &sessionid,
-                        extract_cookie_value(&cookie_strings, "csrftoken").as_deref(),
-                    );
-                    emit_login_result(&poll_app, true, None);
-                    let _ = window.close();
-                }
-                return;
+            let sessionid = match extract_sessionid(&cookie_strings) {
+                Some(sessionid) => sessionid,
+                None => continue,
+            };
+            if tracker.on_cookies(Some(&sessionid)) == PollAction::Wait {
+                continue;
             }
+            // The anonymous sessionid from the Entra ID redirect lands here too: keep the
+            // window open until the portal accepts the cookie, so the user can finish
+            // the login instead of losing the window after one second.
+            let csrftoken = extract_cookie_value(&cookie_strings, "csrftoken");
+            let cookie_header = session_cookie_header(&sessionid, csrftoken.as_deref());
+            if !session_is_authenticated(&probe_client, &cookie_header).await {
+                continue;
+            }
+            if login_state.login_generation() == generation {
+                login_state.set_session(&sessionid, csrftoken.as_deref());
+                emit_login_result(&poll_app, true, None);
+                let _ = window.close();
+            }
+            return;
         }
     });
     Ok(())
@@ -266,7 +336,7 @@ pub async fn portal_create_key(
             })?,
         };
 
-    let client = portal_client()?;
+    let client = portal_client(reqwest::redirect::Policy::default())?;
     let cookie_header = state.cookie_header().ok_or_else(|| {
         AppError::new(
             "portal-auth",
@@ -344,9 +414,10 @@ pub async fn portal_close<R: tauri::Runtime>(
     Ok(())
 }
 
-fn portal_client() -> Result<reqwest::Client, AppError> {
+fn portal_client(redirect: reqwest::redirect::Policy) -> Result<reqwest::Client, AppError> {
     reqwest::Client::builder()
         .user_agent(concat!("epfl-openwork-installer/", env!("CARGO_PKG_VERSION")))
+        .redirect(redirect)
         // The portal is internal-only and can hang: bound every request so the
         // UI keeps control and can surface a typed network error.
         .timeout(Duration::from_secs(30))
@@ -431,7 +502,7 @@ async fn load_portal_form(state: &PortalState) -> Result<FormFetch, AppError> {
             "Sign in to the portal before loading the key form.",
         )
     })?;
-    let client = portal_client()?;
+    let client = portal_client(reqwest::redirect::Policy::default())?;
     let overview = fetch_page(
         &client,
         &format!("{PORTAL_BASE}{KEYS_PATH}"),
@@ -811,6 +882,46 @@ mod tests {
         no_csrf.set_session("sid42", None);
         assert_eq!(no_csrf.cookie_header().as_deref(), Some("sessionid=sid42"));
         assert_eq!(PortalState::default().cookie_header(), None);
+    }
+
+    #[test]
+    fn anonymous_sessionid_is_not_a_finished_login() {
+        // Live check on 2026-10-30: GET /aiaas/keys answers 302 /accounts/login -> 302
+        // /accounts/oidc/authenticate/ and that hop already sets an anonymous
+        // sessionid. A cookie in the window therefore proves nothing.
+        let mut tracker = LoginTracker::default();
+        assert_eq!(tracker.on_cookies(None), PollAction::Wait);
+        assert_eq!(tracker.on_cookies(Some("anon-session")), PollAction::Verify);
+        // A rejected probe must not fire a request on every tick...
+        for _ in 0..SESSION_REPROBE_TICKS {
+            assert_eq!(tracker.on_cookies(Some("anon-session")), PollAction::Wait);
+        }
+        // ...but it is retried, in case the portal keeps the session key across login.
+        assert_eq!(tracker.on_cookies(Some("anon-session")), PollAction::Verify);
+        for _ in 0..SESSION_REPROBE_TICKS {
+            assert_eq!(tracker.on_cookies(Some("anon-session")), PollAction::Wait);
+        }
+        assert_eq!(tracker.on_cookies(Some("anon-session")), PollAction::Verify);
+    }
+
+    #[test]
+    fn rotated_sessionid_is_verified_without_delay() {
+        let mut tracker = LoginTracker::default();
+        assert_eq!(tracker.on_cookies(Some("anon-session")), PollAction::Verify);
+        assert_eq!(tracker.on_cookies(Some("anon-session")), PollAction::Wait);
+        assert_eq!(
+            tracker.on_cookies(Some("logged-in-session")),
+            PollAction::Verify
+        );
+    }
+
+    #[test]
+    fn session_cookie_header_pairs_sessionid_and_csrftoken() {
+        assert_eq!(
+            session_cookie_header("sid42", Some("csrfCookie789")),
+            "sessionid=sid42; csrftoken=csrfCookie789"
+        );
+        assert_eq!(session_cookie_header("sid42", None), "sessionid=sid42");
     }
 
     #[test]
