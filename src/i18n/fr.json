@@ -67,5 +67,23 @@
       "unitRequired": "Choisissez d'abord une unité.",
       "tokenRequired": "Collez d'abord le jeton."
     }
+  },
+  "steps": {
+    "providerConfig": {
+      "title": "Fournisseur RCP",
+      "intro": "Cette étape ajoute le fournisseur EPFL RCP AIaaS à votre configuration globale d'OpenCode. Les autres fournisseurs et vos propres réglages restent inchangés.",
+      "pathsLabel": "Fichiers",
+      "configPath": "Fichier de configuration",
+      "backupPath": "Fichier de sauvegarde",
+      "write": "Écrire la configuration",
+      "rerun": "Écrire à nouveau",
+      "writing": "Écriture de la configuration...",
+      "success": "Le fournisseur RCP est dans votre configuration OpenCode.",
+      "unchanged": "Le fournisseur RCP est déjà configuré. Rien n'a été écrit.",
+      "backupCreated": "Votre fichier précédent a été enregistré en sauvegarde.",
+      "invalidJson": "Le fichier de configuration n'est pas un JSON valide. Corrigez-le ou déplacez-le, puis réessayez. Détails : {detail}",
+      "ioError": "Le fichier de configuration n'a pas pu être écrit : {detail}",
+      "keyHint": "Votre clé d'API n'est pas enregistrée dans ce fichier. OpenCode la lit dans votre environnement, ou depuis la connexion de l'étape précédente."
+    }
   }
 }

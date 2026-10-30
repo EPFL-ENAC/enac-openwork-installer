@@ -67,5 +67,23 @@
       "unitRequired": "Choose a unit first.",
       "tokenRequired": "Paste the token first."
     }
+  },
+  "steps": {
+    "providerConfig": {
+      "title": "RCP provider",
+      "intro": "This step adds the EPFL RCP AIaaS provider to your global OpenCode configuration. Other providers and your own settings stay untouched.",
+      "pathsLabel": "Files",
+      "configPath": "Configuration file",
+      "backupPath": "Backup file",
+      "write": "Write configuration",
+      "rerun": "Write again",
+      "writing": "Writing the configuration...",
+      "success": "The RCP provider is in your OpenCode configuration.",
+      "unchanged": "The RCP provider is already configured. Nothing was written.",
+      "backupCreated": "Your previous file was saved as a backup.",
+      "invalidJson": "The configuration file is not valid JSON. Fix it or move it away, then try again. Details: {detail}",
+      "ioError": "The configuration file could not be written: {detail}",
+      "keyHint": "Your API key is not stored in this file. OpenCode reads it from your environment, or from the sign-in of the previous step."
+    }
   }
 }
