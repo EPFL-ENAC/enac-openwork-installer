@@ -1,0 +1,50 @@
+[
+  {
+    "displayName": "OpenWork",
+    "publisher": "different-ai",
+    "installLocation": "C:\\Users\\tester\\AppData\\Local\\Programs\\openwork",
+    "version": "0.18.63",
+    "expected": true
+  },
+  {
+    "displayName": "EPFL OpenWork Installer",
+    "publisher": "EPFL",
+    "installLocation": "C:\\Users\\tester\\AppData\\Local\\EPFL OpenWork Installer",
+    "version": "0.1.0",
+    "expected": false
+  },
+  {
+    "displayName": "OpenWork Installer",
+    "publisher": "EPFL",
+    "installLocation": "C:\\Users\\tester\\AppData\\Local\\OpenWork Installer",
+    "version": "0.1.0",
+    "expected": false
+  },
+  {
+    "displayName": "OpenWork Setup",
+    "publisher": "EPFL",
+    "installLocation": "",
+    "expected": false
+  },
+  {
+    "displayName": "OpenWork Cloud",
+    "publisher": "different-ai",
+    "expected": false
+  },
+  {
+    "displayName": "OpenWork Nightly",
+    "publisher": "different-ai",
+    "expected": false
+  },
+  {
+    "displayName": "openwork",
+    "publisher": "Other Corp",
+    "version": "1.0.0",
+    "expected": false
+  },
+  {
+    "displayName": "OpenCode",
+    "publisher": "different-ai",
+    "expected": false
+  }
+]

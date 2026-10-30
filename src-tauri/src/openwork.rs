@@ -7,6 +7,25 @@ use std::time::Duration;
 pub const RELEASE_URL: &str = "https://api.github.com/repos/different-ai/openwork/releases/latest";
 const INSTALL_TIMEOUT: Duration = Duration::from_secs(900);
 const SHORT_TIMEOUT: Duration = Duration::from_secs(120);
+#[cfg(any(target_os = "macos", test))]
+const OPENWORK_APP: &str = "OpenWork.app";
+const OPENWORK_EXE: &str = "OpenWork.exe";
+#[cfg(any(windows, test))]
+const OPENWORK_PRODUCT_NAME: &str = "openwork";
+/// Install directory name of the electron-builder NSIS per-user build.
+#[cfg(any(windows, test))]
+const OPENWORK_PROGRAMS_DIR: &str = "openwork";
+
+/// One entry of the HKCU uninstall registry key, as far as detection needs it.
+#[derive(Debug, Clone, Default, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg(any(windows, test))]
+pub struct UninstallEntry {
+    pub display_name: String,
+    pub publisher: Option<String>,
+    pub install_location: Option<String>,
+    pub version: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Asset {
@@ -126,7 +145,7 @@ fn windows_launch_target(path: &str) -> PathBuf {
     let path = PathBuf::from(path);
     match path.extension().and_then(|ext| ext.to_str()) {
         Some(ext) if ext.eq_ignore_ascii_case("exe") => path,
-        _ => path.join("OpenWork.exe"),
+        _ => path.join(OPENWORK_EXE),
     }
 }
 
@@ -230,7 +249,7 @@ async fn install_nsis(installer: &Path, log: &Logger) -> Result<(), AppError> {
 
 fn status_blocking() -> InstallStatus {
     #[cfg(target_os = "macos")]
-    if let Some(status) = macos_status() {
+    if let Some(status) = macos_status_from(Path::new("/Applications")) {
         return status;
     }
     #[cfg(windows)]
@@ -244,9 +263,9 @@ fn status_blocking() -> InstallStatus {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn macos_status() -> Option<InstallStatus> {
-    let app = Path::new("/Applications/OpenWork.app");
+#[cfg(any(target_os = "macos", test))]
+fn macos_status_from(apps: &Path) -> Option<InstallStatus> {
+    let app = apps.join(OPENWORK_APP);
     if !app.is_dir() {
         return None;
     }
@@ -260,55 +279,86 @@ fn macos_status() -> Option<InstallStatus> {
     })
 }
 
+#[cfg(any(windows, test))]
+fn normalized(value: &str) -> String {
+    value.trim().to_lowercase()
+}
+
+/// Real OpenWork only: the exact product name from its own publisher. Our own
+/// entries ("OpenWork Installer", "EPFL OpenWork Installer") and any name that
+/// merely contains "openwork" fail the exact match, so they never count.
+#[cfg(any(windows, test))]
+pub fn is_openwork_uninstall_entry(entry: &UninstallEntry) -> bool {
+    if normalized(&entry.display_name) != OPENWORK_PRODUCT_NAME {
+        return false;
+    }
+    entry
+        .publisher
+        .as_deref()
+        .is_some_and(|publisher| normalized(publisher).contains("different-ai"))
+}
+
+/// Detection shared by the tests and the Windows status check: the default
+/// electron-builder install dir first, then the install location of a real
+/// OpenWork uninstall entry. A path only counts when the exe is there.
+#[cfg(any(windows, test))]
+pub fn windows_status_from(
+    programs_dir: Option<&Path>,
+    entries: &[UninstallEntry],
+) -> Option<InstallStatus> {
+    let entry = entries.iter().find(|entry| is_openwork_uninstall_entry(entry));
+    if let Some(exe) = programs_dir.map(|dir| dir.join(OPENWORK_PROGRAMS_DIR).join(OPENWORK_EXE)) {
+        if exe.is_file() {
+            return Some(installed_at(&exe, entry.and_then(|entry| entry.version.clone())));
+        }
+    }
+    let dir = entry?.install_location.as_deref().map(str::trim)?;
+    if dir.is_empty() {
+        return None;
+    }
+    let exe = windows_launch_target(dir);
+    exe.is_file()
+        .then(|| installed_at(&exe, entry.and_then(|entry| entry.version.clone())))
+}
+
+#[cfg(any(windows, test))]
+fn installed_at(exe: &Path, version: Option<String>) -> InstallStatus {
+    InstallStatus {
+        installed: true,
+        version,
+        path: Some(exe.display().to_string()),
+    }
+}
+
 #[cfg(windows)]
 fn windows_status() -> Option<InstallStatus> {
-    if let Some(status) = registry_status() {
-        return Some(status);
-    }
-    let base = std::env::var_os("LOCALAPPDATA")
-        .map(|dir| std::path::PathBuf::from(dir).join("Programs"))?;
-    for vendor in ["@openworkdesktop", "OpenWork", "openwork"] {
-        for exe in ["OpenWork.exe", "openwork.exe"] {
-            let path = base.join(vendor).join(exe);
-            if path.is_file() {
-                return Some(InstallStatus {
-                    installed: true,
-                    version: None,
-                    path: Some(path.display().to_string()),
-                });
-            }
-        }
-    }
-    None
+    let programs = std::env::var_os("LOCALAPPDATA").map(|dir| PathBuf::from(dir).join("Programs"));
+    windows_status_from(programs.as_deref(), &registry_entries())
 }
 
 #[cfg(windows)]
-fn registry_status() -> Option<InstallStatus> {
+fn registry_entries() -> Vec<UninstallEntry> {
     use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
-    let uninstall = winreg::RegKey::predef(HKEY_CURRENT_USER)
+    let Ok(uninstall) = winreg::RegKey::predef(HKEY_CURRENT_USER)
         .open_subkey_with_flags(r"Software\Microsoft\Windows\CurrentVersion\Uninstall", KEY_READ)
-        .ok()?;
-    for name in uninstall.enum_keys().flatten() {
-        let Ok(key) = uninstall.open_subkey_with_flags(&name, KEY_READ) else {
-            continue;
-        };
-        let display: String = key.get_value("DisplayName").unwrap_or_default();
-        if !display.to_lowercase().contains("openwork") {
-            continue;
-        }
-        let version = key.get_value("DisplayVersion").ok();
-        let location: Option<String> = key.get_value("InstallLocation").ok();
-        return Some(InstallStatus {
-            installed: true,
-            version,
-            path: location.filter(|dir| !dir.trim().is_empty()),
-        });
-    }
-    None
+    else {
+        return Vec::new();
+    };
+    uninstall
+        .enum_keys()
+        .flatten()
+        .filter_map(|name| uninstall.open_subkey_with_flags(&name, KEY_READ).ok())
+        .map(|key| UninstallEntry {
+            display_name: key.get_value("DisplayName").unwrap_or_default(),
+            publisher: key.get_value("Publisher").ok(),
+            install_location: key.get_value("InstallLocation").ok(),
+            version: key.get_value("DisplayVersion").ok(),
+        })
+        .collect()
 }
 
-#[cfg(target_os = "macos")]
-pub fn plist_string_value(xml: &str, key: &str) -> Option<String> {
+#[cfg(any(target_os = "macos", test))]
+fn plist_string_value(xml: &str, key: &str) -> Option<String> {
     let marker = format!("<key>{key}</key>");
     let rest = &xml[xml.find(&marker)? + marker.len()..];
     let start = rest.find("<string>")? + "<string>".len();
@@ -437,6 +487,143 @@ mod tests {
         );
     }
 
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "openwork-detect-{}-{tag}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn write_exe(dir: &Path, name: &str) -> PathBuf {
+        std::fs::create_dir_all(dir).unwrap();
+        let path = dir.join(name);
+        std::fs::write(&path, b"").unwrap();
+        path
+    }
+
+    fn uninstall(name: &str, publisher: &str, location: Option<&str>) -> UninstallEntry {
+        UninstallEntry {
+            display_name: name.to_string(),
+            publisher: Some(publisher.to_string()),
+            install_location: location.map(str::to_string),
+            version: Some("0.18.63".to_string()),
+        }
+    }
+
+    #[test]
+    fn detects_openwork_at_the_electron_builder_default_path() {
+        let programs = scratch("default-path");
+        let exe = write_exe(&programs.join("openwork"), "OpenWork.exe");
+        let status = windows_status_from(Some(&programs), &[]).unwrap();
+        assert!(status.installed);
+        assert_eq!(status.path, Some(exe.display().to_string()));
+    }
+
+    #[test]
+    fn detects_openwork_from_a_different_ai_uninstall_entry() {
+        let programs = scratch("registry-default");
+        let custom = scratch("registry-custom");
+        let exe = write_exe(&custom, "OpenWork.exe");
+        let location = custom.display().to_string();
+        let entries = [uninstall("OpenWork", "different-ai", Some(&location))];
+        let status = windows_status_from(Some(&programs), &entries).unwrap();
+        assert_eq!(status.path, Some(exe.display().to_string()));
+        assert_eq!(status.version.as_deref(), Some("0.18.63"));
+    }
+
+    #[test]
+    fn never_detects_our_own_installer_as_openwork() {
+        let programs = scratch("our-own-app");
+        let own = write_exe(
+            &programs.join("EPFL OpenWork Installer"),
+            "EPFL OpenWork Installer.exe",
+        );
+        let location = own.parent().unwrap().display().to_string();
+        for name in ["OpenWork Installer", "EPFL OpenWork Installer"] {
+            let entries = [uninstall(name, "EPFL", Some(&location))];
+            assert_eq!(
+                windows_status_from(Some(&programs), &entries),
+                None,
+                "{name} must not count as OpenWork"
+            );
+        }
+    }
+
+    #[test]
+    fn matches_only_the_real_openwork_uninstall_entry() {
+        #[derive(serde::Deserialize)]
+        struct Case {
+            #[serde(flatten)]
+            entry: UninstallEntry,
+            expected: bool,
+        }
+        let cases: Vec<Case> =
+            serde_json::from_str(&std::fs::read_to_string(fixture("openwork-uninstall-entries.json")).unwrap())
+                .unwrap();
+        assert!(cases.iter().any(|case| case.expected));
+        for case in &cases {
+            assert_eq!(
+                is_openwork_uninstall_entry(&case.entry),
+                case.expected,
+                "{} from {:?}",
+                case.entry.display_name,
+                case.entry.publisher
+            );
+        }
+    }
+
+    #[test]
+    fn detects_openwork_without_localappdata() {
+        let custom = scratch("no-localappdata");
+        let exe = write_exe(&custom, "OpenWork.exe");
+        let location = custom.display().to_string();
+        let entries = [uninstall("OpenWork", "different-ai", Some(&location))];
+        let status = windows_status_from(None, &entries).unwrap();
+        assert_eq!(status.path, Some(exe.display().to_string()));
+    }
+
+    #[test]
+    fn ignores_a_stale_openwork_uninstall_entry() {
+        let programs = scratch("stale-entry");
+        let gone = programs.join("gone").display().to_string();
+        assert_eq!(
+            windows_status_from(
+                Some(&programs),
+                &[uninstall("OpenWork", "different-ai", Some(&gone))]
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn finds_openwork_app_in_the_applications_directory() {
+        let apps = scratch("applications");
+        assert_eq!(macos_status_from(&apps), None);
+        let contents = apps.join("OpenWork.app").join("Contents");
+        std::fs::create_dir_all(&contents).unwrap();
+        std::fs::write(
+            contents.join("Info.plist"),
+            "<key>CFBundleShortVersionString</key><string>0.18.63</string>",
+        )
+        .unwrap();
+        let status = macos_status_from(&apps).unwrap();
+        assert_eq!(status.version.as_deref(), Some("0.18.63"));
+        assert_eq!(
+            status.path,
+            Some(apps.join("OpenWork.app").display().to_string())
+        );
+    }
+
+    #[test]
+    fn does_not_take_our_own_app_bundle_for_openwork() {
+        let apps = scratch("our-app-bundle");
+        std::fs::create_dir_all(apps.join("EPFL OpenWork Installer.app").join("Contents")).unwrap();
+        assert_eq!(macos_status_from(&apps), None);
+    }
+
     #[test]
     fn selects_asset_per_platform_and_arch() {
         let release = release();
@@ -510,7 +697,6 @@ mod tests {
         assert_eq!(err.kind, "io");
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
     fn reads_the_version_from_an_info_plist() {
         let plist = r#"<?xml version="1.0" encoding="UTF-8"?>

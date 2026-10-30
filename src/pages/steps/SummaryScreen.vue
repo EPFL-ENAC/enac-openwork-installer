@@ -1,14 +1,25 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { EpflButton } from '../../kit'
-import { launchOpenwork } from '../../lib/ipc'
-import { OPENWORK_DOCS_URL, OPENWORK_URL } from '../../lib/links'
+import { EpflAlert, EpflButton } from '../../kit'
+import { launchOpenwork, openworkStatus, type AppError } from '../../lib/ipc'
+import { OPENWORK_DOCS_URL } from '../../lib/links'
 import { useFlow } from '../../stores/flow'
 
 const emit = defineEmits<{ 'open-url': [url: string] }>()
 const { t } = useI18n()
 const { results } = useFlow()
+
+const openworkInstalled = ref(Boolean(results.openwork))
+const launchError = ref<AppError | null>(null)
+
+onMounted(async () => {
+  try {
+    openworkInstalled.value = (await openworkStatus()).installed
+  } catch {
+    openworkInstalled.value = false
+  }
+})
 
 const toolText = (id: 'opencode' | 'openwork') => {
   const result = results[id]
@@ -25,10 +36,11 @@ const configPaths = computed(() =>
 )
 
 const launch = async () => {
+  launchError.value = null
   try {
     await launchOpenwork()
-  } catch {
-    emit('open-url', OPENWORK_URL)
+  } catch (cause) {
+    launchError.value = cause as AppError
   }
 }
 
@@ -72,8 +84,14 @@ const smokeText = computed(() => {
       </ul>
     </div>
 
+    <EpflAlert v-if="launchError" variant="danger">
+      {{ t('common.error', { message: launchError.message }) }}
+    </EpflAlert>
+
+    <p v-else-if="!openworkInstalled">{{ t('openwork.missing') }}</p>
+
     <div class="actions">
-      <EpflButton @click="launch">{{ t('summary.launch') }}</EpflButton>
+      <EpflButton :disabled="!openworkInstalled" @click="launch">{{ t('summary.launch') }}</EpflButton>
       <EpflButton variant="secondary" @click="emit('open-url', OPENWORK_DOCS_URL)">
         {{ t('summary.docsLink') }}
       </EpflButton>
