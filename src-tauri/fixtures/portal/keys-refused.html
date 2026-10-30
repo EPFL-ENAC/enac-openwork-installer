@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Create a new key - RCP Portal</title>
+</head>
+<body>
+  <h1>Create a new API key</h1>
+  <form method="post" action="/aiaas/keys/new" class="key-form">
+    <input type="hidden" name="csrfmiddlewaretoken" value="formCsrfToken456defGHI789">
+    <ul class="errorlist">
+      <li>You have reached the maximum number of API keys for your unit. Please contact supportrcp@epfl.ch.</li>
+    </ul>
+    <div class="form-group">
+      <label for="id_name">Name</label>
+      <input type="text" name="name" id="id_name" value="OpenWork" maxlength="64">
+    </div>
+    <div class="form-group">
+      <label for="id_unit">Unit</label>
+      <select name="unit" id="id_unit">
+        <option value="ENAC-IT" selected>ENAC-IT</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Create key</button>
+  </form>
+</body>
+</html>

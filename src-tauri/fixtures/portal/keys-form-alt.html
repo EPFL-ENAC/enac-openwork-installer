@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="csrf-token" content="altMarkupCsrf000aaa111bbb">
+  <title>RCP Portal</title>
+</head>
+<body>
+  <div id="content">
+    <h2>New key</h2>
+    <form method="post" action="new">
+      <div>
+        <label for="unit-select">Unit</label>
+        <select id="unit-select" aria-label="Unit">
+          <option>ENAC</option>
+          <option>FSV</option>
+          <option>SB</option>
+        </select>
+      </div>
+      <div>
+        <label>Name</label>
+        <input type="text" name="name">
+      </div>
+      <button>Create</button>
+    </form>
+  </div>
+</body>
+</html>
