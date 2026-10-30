@@ -59,7 +59,10 @@ export const createOrchestrator = (
       sink.setStepStatus(step.id, 'running')
       const outcome = await attempt(step)
       if (outcome.status === 'failed') {
-        results = { ...results, [step.id]: { status: 'failed', detail: outcome.error.message } }
+        results = {
+          ...results,
+          [step.id]: { status: 'failed', kind: outcome.error.kind, detail: outcome.error.message },
+        }
         sink.setStepStatus(step.id, 'failed')
         failedStep = step.id
         state = 'failed'

@@ -53,7 +53,7 @@ const smokeText = computed(() => {
 
 <template>
   <section>
-    <h1>{{ t('summary.title') }}</h1>
+    <h2 class="summary-title">{{ t('summary.title') }}</h2>
     <p>{{ t('summary.intro') }}</p>
 
     <dl class="summary-list">
@@ -100,6 +100,11 @@ const smokeText = computed(() => {
 </template>
 
 <style scoped>
+.summary-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-h4);
+}
+
 .summary-list {
   margin: var(--space-3) 0;
   display: flex;

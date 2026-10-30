@@ -1,35 +1,33 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { EpflButton, EpflCard } from '../../kit'
-import { STEP_ORDER, type StepDonePayload } from '../../lib/flow'
+import { useRouter } from 'vue-router'
+import { EpflButton } from '../../kit'
+import { useFlow } from '../../stores/flow'
 
-const emit = defineEmits<{ done: [payload?: StepDonePayload] }>()
 const { t } = useI18n()
+const router = useRouter()
+const { state, start } = useFlow()
+
+const begin = () => {
+  if (state.value === 'idle') void start()
+  router.push({ name: 'run' })
+}
 </script>
 
 <template>
   <section>
     <h1>{{ t('welcome.title') }}</h1>
     <p class="lead">{{ t('welcome.intro') }}</p>
-    <EpflCard :title="t('welcome.overview')" class="overview">
-      <ol class="step-list">
-        <li v-for="id in STEP_ORDER" :key="id">{{ t(`stepTitles.${id}`) }}</li>
-      </ol>
-    </EpflCard>
+    <p class="lead">{{ t('welcome.pauses') }}</p>
     <div class="actions">
-      <EpflButton @click="emit('done')">{{ t('welcome.start') }}</EpflButton>
+      <EpflButton :disabled="state === 'running'" @click="begin">{{ t('welcome.start') }}</EpflButton>
     </div>
   </section>
 </template>
 
 <style scoped>
-.overview {
-  margin: var(--space-3) 0;
-}
-
-.step-list {
-  margin: 0;
-  padding-left: var(--space-4);
+.lead {
+  margin: 0 0 var(--space-2);
 }
 
 .actions {

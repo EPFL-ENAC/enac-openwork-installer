@@ -67,3 +67,5 @@ export const portalCreateKey = (name: string, unit?: string | null) =>
 export const portalClose = () => invoke<void>('portal_close')
 export const onPortalLogin = (handler: (result: PortalLogin) => void): Promise<UnlistenFn> =>
   listen<PortalLogin>('portal-login', (event) => handler(event.payload))
+export const onBackendLog = (handler: (log: BackendLog) => void): Promise<UnlistenFn> =>
+  listen<BackendLog>('backend-log', (event) => handler(event.payload))

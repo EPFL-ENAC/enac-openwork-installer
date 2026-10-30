@@ -10,22 +10,26 @@
   "welcome": {
     "title": "Bienvenue",
     "intro": "Cet outil installe OpenCode et OpenWork sur votre ordinateur.",
-    "overview": "Ce que fait cette installation",
+    "pauses": "Commencer lance toute l'installation. Elle s'arrête seulement pour la connexion au portail EPFL et pour le choix de la clé RCP.",
     "start": "Commencer"
   },
-  "status": {
-    "checking": "Vérification...",
-    "installed": "OpenCode {version} est installé.",
-    "error": "Statut d'OpenCode indisponible : {message}"
+  "run": {
+    "title": "Installation",
+    "intro": "Les étapes s'exécutent l'une après l'autre. La trace reste visible et montre ce qui se passe.",
+    "version": "Version {version}",
+    "keyName": "Clé RCP {name}",
+    "error": {
+      "generic": "Une erreur est survenue : {message}",
+      "network": "Le réseau EPFL n'est pas accessible. Si vous êtes hors campus, connectez-vous au VPN EPFL.",
+      "smoke": "Le test de fonctionnement a échoué : {detail}",
+      "provider": "La configuration d'OpenCode n'a pas été écrite : {detail}",
+      "missingKey": "Aucune clé RCP n'est disponible depuis l'étape précédente.",
+      "openworkBroken": "La base de données d'OpenWork bloque le démarrage. Sauvegardez-la et videz-la, puis relancez l'étape."
+    }
   },
   "rcpKey": {
-    "title": "Clé RCP",
-    "intro": "OpenWork utilise une clé RCP pour joindre les services d'IA de l'EPFL. Cette étape récupère la clé depuis le portail RCP.",
     "login": {
-      "starting": "Ouverture du portail RCP...",
-      "waiting": "Une fenêtre du portail est ouverte. Connectez-vous avec votre compte EPFL. Cette fenêtre continue dès que vous êtes connecté.",
-      "failed": "La connexion au portail a échoué : {message}",
-      "restart": "Relancer la connexion"
+      "waiting": "Une fenêtre du portail est ouverte. Connectez-vous avec votre compte EPFL. L'installation continue dès que vous êtes connecté."
     },
     "unit": {
       "label": "Unité",
@@ -43,69 +47,19 @@
       "newNameLabel": "Nom de la nouvelle clé",
       "createNew": "Créer une seconde clé"
     },
-    "token": {
-      "title": "Votre clé est prête",
-      "label": "Jeton de {name}",
-      "reveal": "Afficher le jeton",
-      "hide": "Masquer le jeton",
-      "copy": "Copier le jeton",
-      "copied": "Jeton copié",
-      "warning": "Le presse-papiers contient maintenant un secret. Collez-le uniquement dans OpenCode, puis videz le presse-papiers.",
-      "continue": "Continuer"
-    },
     "manual": {
       "title": "Faire soi-même dans le navigateur",
-      "intro": "Si la fenêtre du portail ne fonctionne pas, créez ou copiez la clé dans votre navigateur.",
+      "intro": "La fenêtre du portail n'a pas fonctionné. Créez ou copiez la clé dans votre navigateur, puis collez le jeton.",
       "open": "Ouvrir la page des clés RCP",
       "step1": "Connectez-vous au portail RCP avec votre compte EPFL.",
       "step2": "Créez une clé OpenWork ou copiez le jeton de la clé existante.",
       "step3": "Collez le jeton dans le champ ci-dessous.",
       "pasteLabel": "Jeton",
       "paste": "Utiliser ce jeton"
-    },
-    "error": {
-      "generic": "L'étape du portail a échoué ({kind}) : {message}",
-      "nameRequired": "Saisissez d'abord un nom de clé.",
-      "unitRequired": "Choisissez d'abord une unité.",
-      "tokenRequired": "Collez d'abord le jeton."
-    }
-  },
-  "steps": {
-    "providerConfig": {
-      "title": "Fournisseur RCP",
-      "intro": "Cette étape ajoute le fournisseur EPFL RCP AIaaS à votre configuration globale d'OpenCode. Les autres fournisseurs et vos propres réglages restent inchangés.",
-      "pathsLabel": "Fichiers",
-      "configPath": "Fichier de configuration",
-      "backupPath": "Fichier de sauvegarde",
-      "write": "Écrire la configuration",
-      "rerun": "Écrire à nouveau",
-      "writing": "Écriture de la configuration...",
-      "success": "Le fournisseur RCP est dans votre configuration OpenCode.",
-      "unchanged": "Le fournisseur RCP est déjà configuré. Rien n'a été écrit.",
-      "backupCreated": "Votre fichier précédent a été enregistré en sauvegarde.",
-      "invalidJson": "Le fichier de configuration n'est pas un JSON valide. Corrigez-le ou déplacez-le, puis réessayez. Détails : {detail}",
-      "ioError": "Le fichier de configuration n'a pas pu être écrit : {detail}",
-      "keyHint": "Votre clé d'API RCP est écrite dans ce fichier. Gardez le fichier privé.",
-      "missingKey": "Aucune clé RCP n'est disponible depuis l'étape précédente."
-    }
-  },
-  "shell": {
-    "locked": "Cette étape est verrouillée. Terminez d'abord les étapes précédentes.",
-    "stepsTitle": "Étapes de l'installation",
-    "stepState": {
-      "done": "Terminé",
-      "skipped": "Ignoré"
     }
   },
   "network": {
-    "title": "Vérification du réseau",
-    "intro": "L'installation vérifie que cet ordinateur peut atteindre le portail RCP de l'EPFL. Seule la création de clé nécessite le réseau EPFL, le point d'accès d'inférence est public.",
-    "checking": "Vérification de la connexion à {host}...",
-    "pass": "Le réseau EPFL est accessible.",
-    "fail": "Le réseau EPFL n'est pas accessible. Si vous êtes hors campus, connectez-vous au VPN EPFL.",
-    "retry": "Réessayer",
-    "vpnLink": "Ouvrir la documentation du VPN EPFL",
-    "next": "Continuer"
+    "vpnLink": "Ouvrir la documentation du VPN EPFL"
   },
   "linux": {
     "prereq": {
@@ -113,48 +67,15 @@
       "missingFuse": "libfuse2 est absent. L'AppImage peut ne pas démarrer. Installez-le avec : sudo apt install libfuse2 (libfuse2t64 sur Ubuntu 24.04)"
     }
   },
-  "opencode": {
-    "title": "OpenCode",
-    "intro": "OpenCode fournit l'assistant IA utilisé par OpenWork.",
-    "installed": "OpenCode {version} est déjà installé.",
-    "missing": "OpenCode n'est pas installé sur cet ordinateur.",
-    "install": "Installer OpenCode",
-    "installing": "Installation d'OpenCode...",
-    "installDone": "OpenCode {version} est installé.",
-    "skip": "Ignorer",
-    "continue": "Continuer",
-    "progress": "Progression de l'installation"
-  },
-  "smokeTest": {
-    "title": "Test de fumée",
-    "intro": "Le test de fumée vérifie qu'OpenCode fonctionne avec le fournisseur configuré.",
-    "run": "Lancer le test de fumée",
-    "running": "Test de fumée en cours...",
-    "pass": "Le test de fumée a réussi.",
-    "fail": "Le test de fumée a échoué.",
-    "detail": "Détail",
-    "retry": "Réessayer",
-    "next": "Continuer"
-  },
   "openwork": {
-    "title": "OpenWork",
-    "intro": "OpenWork est l'environnement de travail EPFL que cette installation met en place.",
-    "installed": "OpenWork {version} est déjà installé.",
     "missing": "OpenWork n'est pas installé sur cet ordinateur.",
-    "install": "Installer OpenWork",
-    "installing": "Installation d'OpenWork...",
-    "installDone": "OpenWork {version} est installé.",
-    "skip": "Ignorer",
-    "continue": "Continuer",
-    "progress": "Progression de l'installation",
     "stateBrokenTitle": "OpenWork ne démarre pas",
     "stateBrokenDetail": "OpenWork s'arrête avec le message : Database is not empty and has no session table.",
     "stateBrokenCause": "La cause est un fichier de base de données créé par une autre version d'OpenCode. OpenWork attend sa propre structure dans ce fichier et s'arrête donc au démarrage.",
     "stateBrokenFix": "Cette installation peut déplacer le fichier vers une sauvegarde et le vider. OpenWork crée ensuite une nouvelle base de données à son prochain démarrage. La sauvegarde garde l'ancien contenu, rien n'est supprimé.",
     "stateConsent": "J'accepte que cette installation déplace le fichier de base de données vers une sauvegarde.",
     "stateRepair": "Sauvegarder et vider",
-    "stateRepairing": "Sauvegarde de la base de données...",
-    "stateRepaired": "La base de données est sauvegardée. OpenWork en crée une nouvelle à son prochain démarrage. Les fichiers de sauvegarde sont :"
+    "stateRepairing": "Sauvegarde de la base de données..."
   },
   "summary": {
     "title": "Résumé",
@@ -167,7 +88,7 @@
     "configPaths": "Chemins des fichiers de configuration",
     "keyName": "Nom de la clé RCP",
     "noKey": "Aucune clé créée",
-    "smokeTest": "Test de fumée",
+    "smokeTest": "Test de fonctionnement",
     "smokePass": "Réussi",
     "smokeFail": "Échoué",
     "smokeNotRun": "Non exécuté",
@@ -196,7 +117,7 @@
     "opencode": "OpenCode",
     "rcpKey": "Clé RCP",
     "providerConfig": "Configuration du fournisseur",
-    "smokeTest": "Test de fumée",
+    "smokeTest": "Test de fonctionnement",
     "openwork": "OpenWork",
     "summary": "Résumé"
   }

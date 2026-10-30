@@ -10,22 +10,26 @@
   "welcome": {
     "title": "Welcome",
     "intro": "This tool installs OpenCode and OpenWork on your computer.",
-    "overview": "What this installer does",
+    "pauses": "Start runs the whole installation. It stops only for the EPFL portal login and for the RCP key choice.",
     "start": "Start"
   },
-  "status": {
-    "checking": "Checking...",
-    "installed": "OpenCode {version} is installed.",
-    "error": "OpenCode status unavailable: {message}"
+  "run": {
+    "title": "Installation",
+    "intro": "The steps run one after the other. The trace stays visible and shows what happens.",
+    "version": "Version {version}",
+    "keyName": "RCP key {name}",
+    "error": {
+      "generic": "Something went wrong: {message}",
+      "network": "The EPFL network is not reachable. If you are off campus, connect to the EPFL VPN.",
+      "smoke": "The smoke test failed: {detail}",
+      "provider": "The OpenCode configuration was not written: {detail}",
+      "missingKey": "No RCP key is available from the previous step.",
+      "openworkBroken": "The OpenWork database blocks the start. Back it up and clear it, then retry the step."
+    }
   },
   "rcpKey": {
-    "title": "RCP key",
-    "intro": "OpenWork uses an RCP key to reach the EPFL AI services. This step gets the key from the RCP portal.",
     "login": {
-      "starting": "Opening the RCP portal...",
-      "waiting": "A portal window is open. Log in with your EPFL account. This window continues when you are logged in.",
-      "failed": "The portal login failed: {message}",
-      "restart": "Restart the login"
+      "waiting": "A portal window is open. Log in with your EPFL account. The installation continues when you are logged in."
     },
     "unit": {
       "label": "Unit",
@@ -43,69 +47,19 @@
       "newNameLabel": "New key name",
       "createNew": "Create a second key"
     },
-    "token": {
-      "title": "Your key is ready",
-      "label": "Token of {name}",
-      "reveal": "Show the token",
-      "hide": "Hide the token",
-      "copy": "Copy the token",
-      "copied": "Token copied",
-      "warning": "The clipboard now holds a secret. Paste it only in OpenCode, then clear the clipboard.",
-      "continue": "Continue"
-    },
     "manual": {
       "title": "Do it yourself in the browser",
-      "intro": "If the portal window does not work, create or copy the key in your browser.",
+      "intro": "The portal window did not work. Create or copy the key in your browser, then paste the token.",
       "open": "Open the RCP keys page",
       "step1": "Log in to the RCP portal with your EPFL account.",
       "step2": "Create an OpenWork key, or copy the token of the existing key.",
       "step3": "Paste the token in the field below.",
       "pasteLabel": "Token",
       "paste": "Use this token"
-    },
-    "error": {
-      "generic": "The portal step failed ({kind}): {message}",
-      "nameRequired": "Enter a key name first.",
-      "unitRequired": "Choose a unit first.",
-      "tokenRequired": "Paste the token first."
-    }
-  },
-  "steps": {
-    "providerConfig": {
-      "title": "RCP provider",
-      "intro": "This step adds the EPFL RCP AIaaS provider to your global OpenCode configuration. Other providers and your own settings stay untouched.",
-      "pathsLabel": "Files",
-      "configPath": "Configuration file",
-      "backupPath": "Backup file",
-      "write": "Write configuration",
-      "rerun": "Write again",
-      "writing": "Writing the configuration...",
-      "success": "The RCP provider is in your OpenCode configuration.",
-      "unchanged": "The RCP provider is already configured. Nothing was written.",
-      "backupCreated": "Your previous file was saved as a backup.",
-      "invalidJson": "The configuration file is not valid JSON. Fix it or move it away, then try again. Details: {detail}",
-      "ioError": "The configuration file could not be written: {detail}",
-      "keyHint": "Your RCP API key is written into this file. Keep the file private.",
-      "missingKey": "No RCP key is available from the previous step."
-    }
-  },
-  "shell": {
-    "locked": "This step is locked. Finish the previous steps first.",
-    "stepsTitle": "Installation steps",
-    "stepState": {
-      "done": "Done",
-      "skipped": "Skipped"
     }
   },
   "network": {
-    "title": "Network check",
-    "intro": "The installer checks that this computer can reach the EPFL RCP portal. Only key creation needs the EPFL network, the inference endpoint is public.",
-    "checking": "Checking the connection to {host}...",
-    "pass": "The EPFL network is reachable.",
-    "fail": "The EPFL network is not reachable. If you are off campus, connect to the EPFL VPN.",
-    "retry": "Retry",
-    "vpnLink": "Open the EPFL VPN documentation",
-    "next": "Continue"
+    "vpnLink": "Open the EPFL VPN documentation"
   },
   "linux": {
     "prereq": {
@@ -113,48 +67,15 @@
       "missingFuse": "libfuse2 is missing. The AppImage may not start. Install it with: sudo apt install libfuse2 (libfuse2t64 on Ubuntu 24.04)"
     }
   },
-  "opencode": {
-    "title": "OpenCode",
-    "intro": "OpenCode provides the AI assistant used by OpenWork.",
-    "installed": "OpenCode {version} is already installed.",
-    "missing": "OpenCode is not installed on this computer.",
-    "install": "Install OpenCode",
-    "installing": "Installing OpenCode...",
-    "installDone": "OpenCode {version} is installed.",
-    "skip": "Skip",
-    "continue": "Continue",
-    "progress": "Installation progress"
-  },
-  "smokeTest": {
-    "title": "Smoke test",
-    "intro": "The smoke test checks that OpenCode works with the configured provider.",
-    "run": "Run the smoke test",
-    "running": "Running the smoke test...",
-    "pass": "The smoke test passed.",
-    "fail": "The smoke test failed.",
-    "detail": "Detail",
-    "retry": "Retry",
-    "next": "Continue"
-  },
   "openwork": {
-    "title": "OpenWork",
-    "intro": "OpenWork is the EPFL work environment this installer installs.",
-    "installed": "OpenWork {version} is already installed.",
     "missing": "OpenWork is not installed on this computer.",
-    "install": "Install OpenWork",
-    "installing": "Installing OpenWork...",
-    "installDone": "OpenWork {version} is installed.",
-    "skip": "Skip",
-    "continue": "Continue",
-    "progress": "Installation progress",
     "stateBrokenTitle": "OpenWork cannot start",
     "stateBrokenDetail": "OpenWork stops with the message: Database is not empty and has no session table.",
     "stateBrokenCause": "The cause is a database file that another OpenCode version created. OpenWork expects its own layout in that file, so it stops at start.",
     "stateBrokenFix": "This setup can move the file to a backup and clear it. OpenWork then creates a new database on its next start. The backup keeps the old content, nothing is deleted.",
     "stateConsent": "I agree that this setup moves the database file to a backup.",
     "stateRepair": "Back up and clear",
-    "stateRepairing": "Backing up the database...",
-    "stateRepaired": "The database is backed up. OpenWork creates a new one on its next start. The backup files are:"
+    "stateRepairing": "Backing up the database..."
   },
   "summary": {
     "title": "Summary",

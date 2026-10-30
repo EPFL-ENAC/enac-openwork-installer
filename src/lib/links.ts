@@ -1,4 +1,5 @@
 export const PORTAL_URL = 'https://portal.rcp.epfl.ch'
+export const PORTAL_KEYS_URL = `${PORTAL_URL}/aiaas/keys`
 export const VPN_DOC_URL =
   'https://www.epfl.ch/campus/services/en/it-services/network-services/remote-intranet-access/vpn-clients-available/'
 export const OPENWORK_DOCS_URL = 'https://openworklabs.com/docs'
