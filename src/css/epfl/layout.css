@@ -1,0 +1,28 @@
+/* TEMPLATE — Page composition helpers
+   Section bands, eyebrow labels, breadcrumb, and the key-number grid. These are
+   the scaffolding that arranges organisms/molecules into a page. */
+
+.epfl-section { padding: 4rem 3rem; }
+.epfl-section-muted { background: var(--bg-muted); }
+.epfl-section h2 { font-size: var(--fs-h2); font-weight: var(--w-normal); margin: 0 0 var(--gutter); }
+
+.epfl-eyebrow {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--primary);
+  font-weight: var(--w-bold);
+  margin-bottom: var(--space-2);
+}
+
+.epfl-breadcrumb {
+  padding: 1rem 3rem;
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+  border-bottom: var(--border-w) solid var(--border-subtle);
+}
+.epfl-breadcrumb a { color: var(--fg-muted); text-decoration: none; }
+.epfl-breadcrumb a:hover { color: var(--primary); }
+.epfl-breadcrumb .sep { margin: 0 var(--space-2); }
+
+.epfl-keynumbers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3rem; }

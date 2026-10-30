@@ -9,10 +9,12 @@
   },
   "welcome": {
     "title": "Welcome",
-    "intro": "This tool installs OpenCode and OpenWork on your computer."
+    "intro": "This tool installs OpenCode and OpenWork on your computer.",
+    "overview": "What this setup does",
+    "start": "Start"
   },
   "status": {
-    "checking": "Checking the OpenCode installation...",
+    "checking": "Checking...",
     "installed": "OpenCode {version} is installed.",
     "error": "OpenCode status unavailable: {message}"
   },
@@ -85,5 +87,90 @@
       "ioError": "The configuration file could not be written: {detail}",
       "keyHint": "Your API key is not stored in this file. OpenCode reads it from your environment, or from the sign-in of the previous step."
     }
+  },
+  "shell": {
+    "locked": "This step is locked. Finish the previous steps first.",
+    "stepsTitle": "Setup steps",
+    "stepState": {
+      "done": "Done",
+      "skipped": "Skipped"
+    }
+  },
+  "network": {
+    "title": "Network check",
+    "intro": "The setup checks that this computer can reach the EPFL RCP portal. Only key creation needs the EPFL network, the inference endpoint is public.",
+    "checking": "Checking the connection to {host}...",
+    "pass": "The EPFL network is reachable.",
+    "fail": "The EPFL network is not reachable. If you are off campus, connect to the EPFL VPN.",
+    "retry": "Retry",
+    "vpnLink": "Open the EPFL VPN documentation",
+    "next": "Continue"
+  },
+  "opencode": {
+    "title": "OpenCode",
+    "intro": "OpenCode provides the AI assistant used by OpenWork.",
+    "installed": "OpenCode {version} is already installed.",
+    "missing": "OpenCode is not installed on this computer.",
+    "install": "Install OpenCode",
+    "installing": "Installing OpenCode...",
+    "installDone": "OpenCode {version} is installed.",
+    "skip": "Skip",
+    "continue": "Continue",
+    "progress": "Installation progress"
+  },
+  "smokeTest": {
+    "title": "Smoke test",
+    "intro": "The smoke test checks that OpenCode works with the configured provider.",
+    "run": "Run the smoke test",
+    "running": "Running the smoke test...",
+    "pass": "The smoke test passed.",
+    "fail": "The smoke test failed.",
+    "detail": "Detail",
+    "retry": "Retry",
+    "next": "Continue"
+  },
+  "openwork": {
+    "title": "OpenWork",
+    "intro": "OpenWork is the EPFL work environment this setup installs.",
+    "installed": "OpenWork {version} is already installed.",
+    "missing": "OpenWork is not installed on this computer.",
+    "install": "Install OpenWork",
+    "installing": "Installing OpenWork...",
+    "installDone": "OpenWork {version} is installed.",
+    "skip": "Skip",
+    "continue": "Continue",
+    "progress": "Installation progress"
+  },
+  "summary": {
+    "title": "Summary",
+    "intro": "Here is what this setup did.",
+    "opencode": "OpenCode",
+    "openwork": "OpenWork",
+    "notInstalled": "Not installed",
+    "version": "Version {version}",
+    "skipped": "Skipped (already installed)",
+    "configPaths": "Config file paths",
+    "keyName": "RCP key name",
+    "noKey": "No key created",
+    "smokeTest": "Smoke test",
+    "smokePass": "Passed",
+    "smokeFail": "Failed",
+    "smokeNotRun": "Not run",
+    "launch": "Launch OpenWork",
+    "docsLink": "Open the OpenWork documentation"
+  },
+  "common": {
+    "error": "Something went wrong: {message}",
+    "retry": "Retry"
+  },
+  "stepTitles": {
+    "welcome": "Welcome",
+    "network": "Network check",
+    "opencode": "OpenCode",
+    "rcpKey": "RCP key",
+    "providerConfig": "Provider configuration",
+    "smokeTest": "Smoke test",
+    "openwork": "OpenWork",
+    "summary": "Summary"
   }
 }

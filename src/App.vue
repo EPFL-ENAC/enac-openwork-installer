@@ -1,27 +1,36 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { opencodeStatus, type AppError } from './lib/ipc'
+import { useRoute, useRouter } from 'vue-router'
+import { openUrl } from '@tauri-apps/plugin-opener'
+import { EpflAlert } from './kit'
 import type { Locale } from './i18n'
+import { isStepRoute, router } from './router'
+import { nextStep, type StepDonePayload, type StepId } from './lib/flow'
+import { useFlow } from './stores/flow'
+import StepStepper from './components/StepStepper.vue'
 
 const { t, locale } = useI18n()
+const route = useRoute()
+const { completeStep, isUnlocked } = useFlow()
+
 const locales: Locale[] = ['en', 'fr']
-const status = ref(t('status.checking'))
+const currentStep = computed<StepId>(() => (isStepRoute(route.name) ? route.name : 'welcome'))
+const stepLocked = computed(() => !isUnlocked(currentStep.value))
 
 const setLocale = (value: Locale) => {
   locale.value = value
 }
 
-onMounted(async () => {
-  try {
-    const result = await opencodeStatus()
-    status.value = result.installed
-      ? t('status.installed', { version: result.version ?? '' })
-      : t('status.checking')
-  } catch (error) {
-    status.value = t('status.error', { message: (error as AppError).message })
-  }
-})
+const onDone = (payload?: StepDonePayload) => {
+  completeStep(currentStep.value, payload)
+  const next = nextStep(currentStep.value)
+  if (next) router.push({ name: next })
+}
+
+const onOpenUrl = (url: string) => {
+  openUrl(url).catch(() => {})
+}
 </script>
 
 <template>
@@ -43,9 +52,11 @@ onMounted(async () => {
     </header>
 
     <main class="app-main">
-      <h1>{{ t('welcome.title') }}</h1>
-      <p>{{ t('welcome.intro') }}</p>
-      <p class="status" role="status">{{ status }}</p>
+      <StepStepper :current="currentStep" class="app-stepper" />
+      <div class="app-content">
+        <EpflAlert v-if="stepLocked" variant="warning">{{ t('shell.locked') }}</EpflAlert>
+        <router-view @done="onDone" @open-url="onOpenUrl" />
+      </div>
     </main>
   </div>
 </template>
@@ -83,13 +94,34 @@ onMounted(async () => {
 
 .app-main {
   flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-5);
   width: 100%;
   max-width: 60rem;
+  margin: 0 auto;
   padding: var(--space-5) var(--space-4);
+  box-sizing: border-box;
 }
 
-.status {
-  margin-top: var(--space-4);
-  color: var(--fg-muted);
+.app-stepper {
+  width: 14rem;
+  flex-shrink: 0;
+}
+
+.app-content {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 767.98px) {
+  .app-main {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .app-stepper {
+    width: 100%;
+  }
 }
 </style>

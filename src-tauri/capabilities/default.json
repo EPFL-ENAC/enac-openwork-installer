@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "updater:default",
+    "opener:default",
     "fs:allow-exists",
     "fs:allow-read-text-file",
     "fs:allow-write-text-file",

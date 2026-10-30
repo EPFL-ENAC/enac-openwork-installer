@@ -4,3 +4,11 @@
 @import './epfl/atoms/button.css';
 @import './epfl/atoms/form.css';
 @import './epfl/molecules/alert.css';
+/* EPFL Design System — bundle for this app.
+   Imports the vendored token layer's companion atomic layers in kit order. */
+
+@import "./epfl/button.css";
+@import "./epfl/badge.css";
+@import "./epfl/alert.css";
+@import "./epfl/card.css";
+@import "./epfl/layout.css";

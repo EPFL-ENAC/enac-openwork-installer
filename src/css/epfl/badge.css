@@ -1,0 +1,35 @@
+/* ATOM — Badge & Tag
+   Badge: small solid status label. Tag: outlined interactive link chip. */
+
+.epfl-badge {
+  display: inline-block;
+  padding: .25em .4em;
+  font-size: 75%;
+  font-weight: var(--w-bold);
+  border-radius: var(--radius);
+  color: var(--on-primary);
+}
+.epfl-badge-pill { border-radius: var(--radius-pill); padding: .25em .6em; }
+
+.epfl-badge-primary  { background: var(--primary); }
+.epfl-badge-success  { background: var(--success); }
+.epfl-badge-warning  { background: var(--warning); }
+.epfl-badge-info     { background: var(--info); }
+.epfl-badge-tertiary { background: var(--tertiary); }
+.epfl-badge-dark     { background: var(--bg-dark); }
+
+.epfl-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.25rem 0.625rem;
+  border: var(--border-w) solid var(--epfl-gray-300);
+  background: var(--bg);
+  font-size: var(--fs-xs);
+  border-radius: var(--radius);
+  color: var(--fg);
+  text-decoration: none;
+  transition: color var(--t-fast), border-color var(--t-fast);
+}
+.epfl-tag:hover { border-color: var(--primary); color: var(--primary); }
+.epfl-tag:focus-visible { outline: var(--focus-w) solid var(--primary-hover); outline-offset: 0.125rem; }
