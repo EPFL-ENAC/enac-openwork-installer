@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }))
+const { invoke, listen } = vi.hoisted(() => ({ invoke: vi.fn(), listen: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke }))
+vi.mock('@tauri-apps/api/event', () => ({ listen }))
 
 import {
   installOpencode,
   installOpenwork,
   opencodeStatus,
+  onPortalLogin,
   openworkStatus,
   portalClose,
   portalCreateKey,
@@ -43,6 +45,20 @@ describe('ipc wrappers', () => {
       'portal_create_key',
       'portal_close',
     ])
+  })
+
+  it('forwards the portal-login event payload', async () => {
+    const unlisten = vi.fn()
+    listen.mockResolvedValue(unlisten)
+    const handler = vi.fn()
+
+    const result = await onPortalLogin(handler)
+    const [, onEvent] = listen.mock.calls[0]
+    onEvent({ payload: { ok: true, error: null } })
+
+    expect(listen).toHaveBeenCalledWith('portal-login', expect.any(Function))
+    expect(handler).toHaveBeenCalledWith({ ok: true, error: null })
+    expect(result).toBe(unlisten)
   })
 
   it('sends the portal key arguments', async () => {

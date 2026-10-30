@@ -15,5 +15,57 @@
     "checking": "Checking the OpenCode installation...",
     "installed": "OpenCode {version} is installed.",
     "error": "OpenCode status unavailable: {message}"
+  },
+  "rcpKey": {
+    "title": "RCP key",
+    "intro": "OpenWork uses an RCP key to reach the EPFL AI services. This step gets the key from the RCP portal.",
+    "login": {
+      "starting": "Opening the RCP portal...",
+      "waiting": "A portal window is open. Log in with your EPFL account. This window continues when you are logged in.",
+      "failed": "The portal login failed: {message}",
+      "restart": "Restart the login"
+    },
+    "unit": {
+      "label": "Unit",
+      "placeholder": "Choose your unit"
+    },
+    "create": {
+      "nameLabel": "Key name",
+      "submit": "Create the key"
+    },
+    "choice": {
+      "title": "An OpenWork key already exists",
+      "text": "Your account may already have an OpenWork key. Reuse the existing key, or create a second key with a new name.",
+      "pasteLabel": "Token of the existing key",
+      "paste": "Use the existing key",
+      "newNameLabel": "New key name",
+      "createNew": "Create a second key"
+    },
+    "token": {
+      "title": "Your key is ready",
+      "label": "Token of {name}",
+      "reveal": "Show the token",
+      "hide": "Hide the token",
+      "copy": "Copy the token",
+      "copied": "Token copied",
+      "warning": "The clipboard now holds a secret. Paste it only in OpenCode, then clear the clipboard.",
+      "continue": "Continue"
+    },
+    "manual": {
+      "title": "Do it yourself in the browser",
+      "intro": "If the portal window does not work, create or copy the key in your browser.",
+      "open": "Open the RCP keys page",
+      "step1": "Log in to the RCP portal with your EPFL account.",
+      "step2": "Create an OpenWork key, or copy the token of the existing key.",
+      "step3": "Paste the token in the field below.",
+      "pasteLabel": "Token",
+      "paste": "Use this token"
+    },
+    "error": {
+      "generic": "The portal step failed ({kind}): {message}",
+      "nameRequired": "Enter a key name first.",
+      "unitRequired": "Choose a unit first.",
+      "tokenRequired": "Paste the token first."
+    }
   }
 }

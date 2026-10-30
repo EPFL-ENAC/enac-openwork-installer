@@ -15,5 +15,57 @@
     "checking": "Vérification de l'installation d'OpenCode...",
     "installed": "OpenCode {version} est installé.",
     "error": "Statut d'OpenCode indisponible : {message}"
+  },
+  "rcpKey": {
+    "title": "Clé RCP",
+    "intro": "OpenWork utilise une clé RCP pour joindre les services d'IA de l'EPFL. Cette étape récupère la clé depuis le portail RCP.",
+    "login": {
+      "starting": "Ouverture du portail RCP...",
+      "waiting": "Une fenêtre du portail est ouverte. Connectez-vous avec votre compte EPFL. Cette fenêtre continue dès que vous êtes connecté.",
+      "failed": "La connexion au portail a échoué : {message}",
+      "restart": "Relancer la connexion"
+    },
+    "unit": {
+      "label": "Unité",
+      "placeholder": "Choisissez votre unité"
+    },
+    "create": {
+      "nameLabel": "Nom de la clé",
+      "submit": "Créer la clé"
+    },
+    "choice": {
+      "title": "Une clé OpenWork existe déjà",
+      "text": "Votre compte possède peut-être déjà une clé OpenWork. Réutilisez la clé existante ou créez une seconde clé avec un nouveau nom.",
+      "pasteLabel": "Jeton de la clé existante",
+      "paste": "Utiliser la clé existante",
+      "newNameLabel": "Nom de la nouvelle clé",
+      "createNew": "Créer une seconde clé"
+    },
+    "token": {
+      "title": "Votre clé est prête",
+      "label": "Jeton de {name}",
+      "reveal": "Afficher le jeton",
+      "hide": "Masquer le jeton",
+      "copy": "Copier le jeton",
+      "copied": "Jeton copié",
+      "warning": "Le presse-papiers contient maintenant un secret. Collez-le uniquement dans OpenCode, puis videz le presse-papiers.",
+      "continue": "Continuer"
+    },
+    "manual": {
+      "title": "Faire soi-même dans le navigateur",
+      "intro": "Si la fenêtre du portail ne fonctionne pas, créez ou copiez la clé dans votre navigateur.",
+      "open": "Ouvrir la page des clés RCP",
+      "step1": "Connectez-vous au portail RCP avec votre compte EPFL.",
+      "step2": "Créez une clé OpenWork ou copiez le jeton de la clé existante.",
+      "step3": "Collez le jeton dans le champ ci-dessous.",
+      "pasteLabel": "Jeton",
+      "paste": "Utiliser ce jeton"
+    },
+    "error": {
+      "generic": "L'étape du portail a échoué ({kind}) : {message}",
+      "nameRequired": "Saisissez d'abord un nom de clé.",
+      "unitRequired": "Choisissez d'abord une unité.",
+      "tokenRequired": "Collez d'abord le jeton."
+    }
   }
 }

@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 export interface InstallStatus {
   installed: boolean
@@ -52,3 +53,5 @@ export const portalGetForm = () => invoke<PortalForm>('portal_get_form')
 export const portalCreateKey = (name: string, unit?: string | null) =>
   invoke<CreatedKey>('portal_create_key', { name, unit: unit ?? null })
 export const portalClose = () => invoke<void>('portal_close')
+export const onPortalLogin = (handler: (result: PortalLogin) => void): Promise<UnlistenFn> =>
+  listen<PortalLogin>('portal-login', (event) => handler(event.payload))

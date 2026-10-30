@@ -1,0 +1,6 @@
+/* EPFL design layer for this app: tokens plus the atoms and molecules the screens use.
+   Copied from the EPFL design reference (epfl-design-skill), not from a package. */
+@import './epfl-tokens.css';
+@import './epfl/atoms/button.css';
+@import './epfl/atoms/form.css';
+@import './epfl/molecules/alert.css';
