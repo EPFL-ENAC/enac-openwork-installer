@@ -1,0 +1,15 @@
+version: 0.18.63
+files:
+  - url: openwork-mac-arm64-0.18.63.zip
+    sha512: YV6t1+f05Nc33OsS9rs50c6Ans+nRcdv7lMmjPCvdaBTumzbs8NYW2Hi402l04LqIjpJXDzmAHZDOL1/u8gKsQ==
+    size: 357498203
+  - url: openwork-mac-arm64-0.18.63.dmg
+    sha512: 5yr0OnoOH1JlHqyM5O92O3W3XwLZCRm1b3X+0o8fdrxOisNXSXtVRsMt4MWkGLAzb4SJ3gW278BxMNdVlb0O1A==
+    size: 358859241
+  - url: openwork-mac-x64-0.18.63.zip
+    sha512: a4ZFzMZhP9mAWEhoe7zA0mokxu5HqSkkHZmjxoWQE/yPKo26zLoNSMauJ55yNlhxD4w6GuqkW89YhFAHAVLLfQ==
+    size: 370205216
+  - url: openwork-mac-x64-0.18.63.dmg
+    sha512: a/PGNtuau37PbpWj1lK7WA1Ml9Q0yCDlS94icEWyyMS0oFSDKY8hjLnH5aR6GOzjQ/su7reZN84Xtx/60fP84w==
+    size: 371455215
+releaseDate: '2026-10-26T23:31:01.631Z'

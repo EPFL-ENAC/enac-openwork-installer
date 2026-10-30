@@ -1,0 +1,307 @@
+{
+  "tag_name": "v0.18.63",
+  "name": "OpenWork v0.18.63",
+  "prerelease": false,
+  "assets": [
+    {
+      "name": "cloud-linux-arm64.yml",
+      "size": 263,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/cloud-linux-arm64.yml"
+    },
+    {
+      "name": "cloud-linux.yml",
+      "size": 264,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/cloud-linux.yml"
+    },
+    {
+      "name": "cloud-mac.yml",
+      "size": 728,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/cloud-mac.yml"
+    },
+    {
+      "name": "cloud.yml",
+      "size": 396,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/cloud.yml"
+    },
+    {
+      "name": "enterprise-linux-arm64.yml",
+      "size": 268,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/enterprise-linux-arm64.yml"
+    },
+    {
+      "name": "enterprise-linux.yml",
+      "size": 269,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/enterprise-linux.yml"
+    },
+    {
+      "name": "enterprise-mac.yml",
+      "size": 748,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/enterprise-mac.yml"
+    },
+    {
+      "name": "enterprise.yml",
+      "size": 406,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/enterprise.yml"
+    },
+    {
+      "name": "latest-linux-arm64.yml",
+      "size": 257,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/latest-linux-arm64.yml"
+    },
+    {
+      "name": "latest-linux.yml",
+      "size": 258,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/latest-linux.yml"
+    },
+    {
+      "name": "latest-mac.yml",
+      "size": 704,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/latest-mac.yml"
+    },
+    {
+      "name": "latest.yml",
+      "size": 384,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/latest.yml"
+    },
+    {
+      "name": "openwork-cloud-linux-arm64-0.18.63.AppImage",
+      "size": 328810531,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-linux-arm64-0.18.63.AppImage"
+    },
+    {
+      "name": "openwork-cloud-linux-arm64-0.18.63.tar.gz",
+      "size": 335699688,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-linux-arm64-0.18.63.tar.gz"
+    },
+    {
+      "name": "openwork-cloud-linux-x64-0.18.63.tar.gz",
+      "size": 336117249,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-linux-x64-0.18.63.tar.gz"
+    },
+    {
+      "name": "openwork-cloud-linux-x86_64-0.18.63.AppImage",
+      "size": 330886278,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-linux-x86_64-0.18.63.AppImage"
+    },
+    {
+      "name": "openwork-cloud-mac-arm64-0.18.63.dmg",
+      "size": 358929162,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-mac-arm64-0.18.63.dmg"
+    },
+    {
+      "name": "openwork-cloud-mac-arm64-0.18.63.dmg.blockmap",
+      "size": 374443,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-mac-arm64-0.18.63.dmg.blockmap"
+    },
+    {
+      "name": "openwork-cloud-mac-arm64-0.18.63.zip",
+      "size": 357520974,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-mac-arm64-0.18.63.zip"
+    },
+    {
+      "name": "openwork-cloud-mac-arm64-0.18.63.zip.blockmap",
+      "size": 373868,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-mac-arm64-0.18.63.zip.blockmap"
+    },
+    {
+      "name": "openwork-cloud-mac-x64-0.18.63.dmg",
+      "size": 371462719,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-mac-x64-0.18.63.dmg"
+    },
+    {
+      "name": "openwork-cloud-mac-x64-0.18.63.dmg.blockmap",
+      "size": 390660,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-mac-x64-0.18.63.dmg.blockmap"
+    },
+    {
+      "name": "openwork-cloud-mac-x64-0.18.63.zip",
+      "size": 370223591,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-mac-x64-0.18.63.zip"
+    },
+    {
+      "name": "openwork-cloud-mac-x64-0.18.63.zip.blockmap",
+      "size": 388099,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-mac-x64-0.18.63.zip.blockmap"
+    },
+    {
+      "name": "openwork-cloud-win-arm64-0.18.63.exe",
+      "size": 260401000,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-win-arm64-0.18.63.exe"
+    },
+    {
+      "name": "openwork-cloud-win-arm64-0.18.63.exe.blockmap",
+      "size": 271769,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-win-arm64-0.18.63.exe.blockmap"
+    },
+    {
+      "name": "openwork-cloud-win-x64-0.18.63.exe",
+      "size": 273354840,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-win-x64-0.18.63.exe"
+    },
+    {
+      "name": "openwork-cloud-win-x64-0.18.63.exe.blockmap",
+      "size": 286505,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-cloud-win-x64-0.18.63.exe.blockmap"
+    },
+    {
+      "name": "openwork-enterprise-linux-arm64-0.18.63.AppImage",
+      "size": 328810998,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-linux-arm64-0.18.63.AppImage"
+    },
+    {
+      "name": "openwork-enterprise-linux-arm64-0.18.63.tar.gz",
+      "size": 335700019,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-linux-arm64-0.18.63.tar.gz"
+    },
+    {
+      "name": "openwork-enterprise-linux-x64-0.18.63.tar.gz",
+      "size": 336133628,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-linux-x64-0.18.63.tar.gz"
+    },
+    {
+      "name": "openwork-enterprise-linux-x86_64-0.18.63.AppImage",
+      "size": 330902936,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-linux-x86_64-0.18.63.AppImage"
+    },
+    {
+      "name": "openwork-enterprise-mac-arm64-0.18.63.dmg",
+      "size": 358884449,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-mac-arm64-0.18.63.dmg"
+    },
+    {
+      "name": "openwork-enterprise-mac-arm64-0.18.63.dmg.blockmap",
+      "size": 376603,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-mac-arm64-0.18.63.dmg.blockmap"
+    },
+    {
+      "name": "openwork-enterprise-mac-arm64-0.18.63.zip",
+      "size": 357538405,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-mac-arm64-0.18.63.zip"
+    },
+    {
+      "name": "openwork-enterprise-mac-arm64-0.18.63.zip.blockmap",
+      "size": 373175,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-mac-arm64-0.18.63.zip.blockmap"
+    },
+    {
+      "name": "openwork-enterprise-mac-x64-0.18.63.dmg",
+      "size": 371459910,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-mac-x64-0.18.63.dmg"
+    },
+    {
+      "name": "openwork-enterprise-mac-x64-0.18.63.dmg.blockmap",
+      "size": 388669,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-mac-x64-0.18.63.dmg.blockmap"
+    },
+    {
+      "name": "openwork-enterprise-mac-x64-0.18.63.zip",
+      "size": 370243553,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-mac-x64-0.18.63.zip"
+    },
+    {
+      "name": "openwork-enterprise-mac-x64-0.18.63.zip.blockmap",
+      "size": 386043,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-mac-x64-0.18.63.zip.blockmap"
+    },
+    {
+      "name": "openwork-enterprise-win-arm64-0.18.63.exe",
+      "size": 260408928,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-win-arm64-0.18.63.exe"
+    },
+    {
+      "name": "openwork-enterprise-win-arm64-0.18.63.exe.blockmap",
+      "size": 271807,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-win-arm64-0.18.63.exe.blockmap"
+    },
+    {
+      "name": "openwork-enterprise-win-x64-0.18.63.exe",
+      "size": 273344960,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-win-x64-0.18.63.exe"
+    },
+    {
+      "name": "openwork-enterprise-win-x64-0.18.63.exe.blockmap",
+      "size": 285677,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-enterprise-win-x64-0.18.63.exe.blockmap"
+    },
+    {
+      "name": "openwork-linux-arm64-0.18.63.AppImage",
+      "size": 328814765,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-linux-arm64-0.18.63.AppImage"
+    },
+    {
+      "name": "openwork-linux-arm64-0.18.63.tar.gz",
+      "size": 335704348,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-linux-arm64-0.18.63.tar.gz"
+    },
+    {
+      "name": "openwork-linux-x64-0.18.63.tar.gz",
+      "size": 336133807,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-linux-x64-0.18.63.tar.gz"
+    },
+    {
+      "name": "openwork-linux-x86_64-0.18.63.AppImage",
+      "size": 330902568,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-linux-x86_64-0.18.63.AppImage"
+    },
+    {
+      "name": "openwork-mac-arm64-0.18.63.dmg",
+      "size": 358859241,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-mac-arm64-0.18.63.dmg"
+    },
+    {
+      "name": "openwork-mac-arm64-0.18.63.dmg.blockmap",
+      "size": 374110,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-mac-arm64-0.18.63.dmg.blockmap"
+    },
+    {
+      "name": "openwork-mac-arm64-0.18.63.zip",
+      "size": 357498203,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-mac-arm64-0.18.63.zip"
+    },
+    {
+      "name": "openwork-mac-arm64-0.18.63.zip.blockmap",
+      "size": 374897,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-mac-arm64-0.18.63.zip.blockmap"
+    },
+    {
+      "name": "openwork-mac-x64-0.18.63.dmg",
+      "size": 371455215,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-mac-x64-0.18.63.dmg"
+    },
+    {
+      "name": "openwork-mac-x64-0.18.63.dmg.blockmap",
+      "size": 389746,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-mac-x64-0.18.63.dmg.blockmap"
+    },
+    {
+      "name": "openwork-mac-x64-0.18.63.zip",
+      "size": 370205216,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-mac-x64-0.18.63.zip"
+    },
+    {
+      "name": "openwork-mac-x64-0.18.63.zip.blockmap",
+      "size": 385944,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-mac-x64-0.18.63.zip.blockmap"
+    },
+    {
+      "name": "openwork-win-arm64-0.18.63.exe",
+      "size": 260410448,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-win-arm64-0.18.63.exe"
+    },
+    {
+      "name": "openwork-win-arm64-0.18.63.exe.blockmap",
+      "size": 272144,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-win-arm64-0.18.63.exe.blockmap"
+    },
+    {
+      "name": "openwork-win-x64-0.18.63.exe",
+      "size": 273351728,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-win-x64-0.18.63.exe"
+    },
+    {
+      "name": "openwork-win-x64-0.18.63.exe.blockmap",
+      "size": 286091,
+      "browser_download_url": "https://github.com/different-ai/openwork/releases/download/v0.18.63/openwork-win-x64-0.18.63.exe.blockmap"
+    }
+  ]
+}

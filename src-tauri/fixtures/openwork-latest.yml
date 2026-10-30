@@ -1,0 +1,9 @@
+version: 0.18.63
+files:
+  - url: openwork-win-arm64-0.18.63.exe
+    sha512: 2qp0KGyCdmqOzP+tWanpDuxsa2kBYb/9VsE3QJOlttF7uqz5fIzbXZvlwLnrB791rVxURN7ip9OaWnBzyTBD/g==
+    size: 260410448
+  - url: openwork-win-x64-0.18.63.exe
+    sha512: H6Iuv0zxiF9G6TugH/RHsIGR9ePW77pusG6rrC0f0UghLRoj9pRPhTlkYNWdoPCP6rpRf08kc0IGH9p4NsfYIw==
+    size: 273351728
+releaseDate: '2026-10-26T23:45:41.454Z'

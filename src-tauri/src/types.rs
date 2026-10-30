@@ -38,6 +38,12 @@ pub struct CreatedKey {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BackendLog {
+    pub task: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppError {
     pub kind: String,
@@ -54,6 +60,18 @@ impl AppError {
 
     pub fn unimplemented(command: &str) -> Self {
         Self::new("unimplemented", format!("{command} is not implemented yet"))
+    }
+
+    pub fn io(message: impl Into<String>) -> Self {
+        Self::new("io", message)
+    }
+
+    pub fn network(message: impl Into<String>) -> Self {
+        Self::new("network", message)
+    }
+
+    pub fn parse(message: impl Into<String>) -> Self {
+        Self::new("parse", message)
     }
 }
 
