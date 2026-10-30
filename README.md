@@ -17,6 +17,8 @@ Application signing and notarization are not part of this release.
 | --- | --- | --- | --- |
 | Windows x64 | `windows-latest` | default | portable `.exe` |
 | macOS universal (arm64 and x64) | `macos-latest` | `universal-apple-darwin` | `.dmg` |
+| Linux x64 | `ubuntu-latest` | default | `.AppImage` |
+| Linux arm64 | `ubuntu-24.04-arm` | default | `.AppImage` |
 
 Windows ships as a single portable `.exe`. There is no setup wizard and no installer. Download the file and run it. WebView2 Evergreen is already present on Windows 10 and 11.
 
@@ -32,9 +34,32 @@ The message comes from the OpenCode engine that OpenWork bundles, not from OpenW
 
 The OpenWork step of this setup detects the condition. It explains it, and with the consent checkbox it moves the database file and its `-wal` and `-shm` files to `<name>.bak-<timestamp>` next to the original. Nothing is deleted, and OpenWork creates a fresh database on its next start. Ceiling: the check exists only in this setup, and it can be removed when a released OpenWork version contains #6662.
 
+## Linux
+
+The AppImage needs the system WebKitGTK library and FUSE. On a Debian or Ubuntu system, install them with:
+
+```sh
+sudo apt-get install libwebkit2gtk-4.1-0 libfuse2
+```
+
+On Ubuntu 24.04, Debian 13 and newer, the FUSE package is named `libfuse2t64`:
+
+```sh
+sudo apt-get install libwebkit2gtk-4.1-0 libfuse2t64
+```
+
+Then make the file executable and run it:
+
+```sh
+chmod +x ./*.AppImage
+./EPFL*.AppImage
+```
+
+If FUSE is not available on the machine, run the AppImage with `--appimage-extract-and-run`. The arm64 build needs the same libraries.
+
 ## Updates
 
-There is no self-update. To update, download the new release from GitHub Releases and replace the old file.
+There is no self-update. To update, download the new release from GitHub Releases and replace the old file. On Linux, download the new `.AppImage` and replace the old one.
 
 ## Release process
 
@@ -47,8 +72,8 @@ There is no self-update. To update, download the new release from GitHub Release
    git push origin v0.1.0
    ```
 
-4. The `Release` workflow builds both platforms and publishes the GitHub Release.
-5. After the workflow succeeds, verify that the release contains the portable `.exe` and the `.dmg`.
+4. The `Release` workflow builds all four platforms and publishes the GitHub Release.
+5. After the workflow succeeds, verify that the release contains the portable `.exe`, the `.dmg` and the two `.AppImage` files.
 
 ## Live test checklist
 
@@ -75,10 +100,11 @@ Run this checklist on the EPFL network or VPN, on a Windows x64 machine and on a
 - [ ] Provider configuration writes the existing token, and the smoke test passes.
 - [ ] Re-run the provider configuration step. It reports no change, does not overwrite the backup, and keeps other providers and user settings.
 
-### Installer checks, both platforms
+### Installer checks, all platforms
 
 - [ ] Windows: the portable `.exe` starts with no admin prompt. A second run detects the existing OpenWork install and does not overwrite it.
 - [ ] macOS: the `.dmg` copies OpenWork to Applications. A second run detects the install and does not overwrite it.
+- [ ] Linux x64 and arm64: the `.AppImage` starts after `chmod +x`, with the prerequisites installed. A second run detects the existing OpenWork install and does not overwrite it.
 - [ ] macOS first start: right-click, select Open, and confirm. Windows first start: SmartScreen, More info, Run anyway. The README states both workarounds.
 - [ ] macOS with an old OpenCode database in `~/.local/share/opencode`: the OpenWork step shows the database warning. The repair button stays disabled until the consent checkbox is set. After the repair the backup files exist, and OpenWork starts.
 
@@ -91,8 +117,8 @@ Run this checklist on the EPFL network or VPN, on a Windows x64 machine and on a
 
 ### Release checks
 
-- [ ] The GitHub Release holds the portable `.exe` and the `.dmg`.
-- [ ] Both build jobs finished green.
+- [ ] The GitHub Release holds the portable `.exe`, the `.dmg` and the two `.AppImage` files.
+- [ ] All four build jobs finished green.
 - [ ] The `.exe` runs on a machine without a previous install and without an admin prompt.
 
 ## Development
