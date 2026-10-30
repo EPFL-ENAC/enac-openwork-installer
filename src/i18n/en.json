@@ -85,7 +85,8 @@
       "backupCreated": "Your previous file was saved as a backup.",
       "invalidJson": "The configuration file is not valid JSON. Fix it or move it away, then try again. Details: {detail}",
       "ioError": "The configuration file could not be written: {detail}",
-      "keyHint": "Your API key is not stored in this file. OpenCode reads it from your environment, or from the sign-in of the previous step."
+      "keyHint": "Your RCP API key is written into this file. Keep the file private.",
+      "missingKey": "No RCP key is available from the previous step."
     }
   },
   "shell": {

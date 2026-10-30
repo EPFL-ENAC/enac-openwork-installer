@@ -63,6 +63,50 @@ Never commit the private key. If you lose the private key or the password, exist
 
 The `Release` workflow needs both signing secrets. If `TAURI_SIGNING_PRIVATE_KEY` is missing, the build fails, because the configuration contains a public key. The private key must match that public key.
 
+## Live test checklist
+
+Run this checklist on the EPFL network or VPN, on a Windows x64 machine and on a macOS machine (Apple silicon and Intel). Use a release build from GitHub Releases, or a local build of the same commit. Use a test EPFL account.
+
+### Fresh RCP key
+
+- [ ] Start the app and confirm the eight steps appear in order. A later step stays locked until the previous step passes.
+- [ ] Network check passes. Disconnect the VPN and confirm the app shows the VPN link and a working retry.
+- [ ] OpenCode step detects an existing install and skips it. On a clean machine it installs OpenCode without an admin prompt.
+- [ ] RCP key step opens the portal window. Complete the Entra ID login and the MFA prompt.
+- [ ] Create a key named `OpenWork`. Confirm the token is masked by default, the reveal button works, and the clipboard warning appears after copy.
+- [ ] Provider configuration step shows `~/.config/opencode/opencode.json` and its `.bak` path, then reports success.
+- [ ] Smoke test passes. A failure shows a readable detail and no key.
+- [ ] OpenWork step detects an existing install and skips it. On a clean machine it installs OpenWork without an admin prompt.
+- [ ] Summary shows both versions, the config paths, the key name and the smoke result.
+- [ ] Launch button opens the installed OpenWork app.
+
+### Existing OpenWork key
+
+- [ ] Create an `OpenWork` key in the portal before the run. Confirm that this is the expected first-user case.
+- [ ] RCP key step detects the existing key and asks for the token. Paste the existing token with the manual field.
+- [ ] The portal still has exactly the same keys after the run. No key is renamed, revoked or deleted.
+- [ ] Provider configuration writes the existing token, and the smoke test passes.
+- [ ] Re-run the provider configuration step. It reports no change, does not overwrite the backup, and keeps other providers and user settings.
+
+### Installer checks, both platforms
+
+- [ ] Windows: the `.exe` installs per user with no admin prompt. A second run detects the install and does not overwrite it.
+- [ ] macOS: the `.dmg` copies OpenWork to Applications. A second run detects the install and does not overwrite it.
+- [ ] macOS first start: right-click, select Open, and confirm. Windows first start: SmartScreen, More info, Run anyway. The README states both workarounds.
+
+### Secret checks
+
+- [ ] Search the OpenCode log directory (`~/.local/share/opencode/log/`) for the token. It must not appear.
+- [ ] Search the app output and the browser or webview console for the token, the `sessionid` cookie and the `csrf` value. None may appear.
+- [ ] The token appears only inside `~/.config/opencode/opencode.json`, in the RCP provider settings.
+- [ ] The backup file and the other config files contain no new secret.
+
+### Release checks
+
+- [ ] The GitHub Release holds the NSIS `.exe`, the `.dmg`, the updater artifacts and `latest.json`.
+- [ ] Both build jobs used the signing secrets and finished green.
+- [ ] The updater endpoint in `latest.json` points at the same release.
+
 ## Development
 
 ```sh

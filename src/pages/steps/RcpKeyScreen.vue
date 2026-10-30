@@ -17,7 +17,7 @@ const portalKeysUrl = 'https://portal.rcp.epfl.ch/aiaas/keys'
 const manualSteps = ['step1', 'step2', 'step3'] as const
 
 const emit = defineEmits<{
-  done: [payload: { keyName: string }]
+  done: [payload: { keyName: string; token: string }]
   'open-url': [url: string]
 }>()
 
@@ -153,7 +153,9 @@ const copyToken = async () => {
 }
 
 const openPortal = () => emit('open-url', portalKeysUrl)
-const finish = () => emit('done', { keyName: keyName.value })
+const finish = () => {
+  if (token.value) emit('done', { keyName: keyName.value, token: token.value })
+}
 
 let unlistenLogin: (() => void) | null = null
 

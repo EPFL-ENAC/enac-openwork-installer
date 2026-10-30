@@ -7,6 +7,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen }))
 import {
   installOpencode,
   installOpenwork,
+  launchOpenwork,
   opencodeStatus,
   onPortalLogin,
   openworkStatus,
@@ -28,6 +29,7 @@ describe('ipc wrappers', () => {
     await installOpencode()
     await openworkStatus()
     await installOpenwork()
+    await launchOpenwork()
     await smokeTest()
     await portalStartLogin()
     await portalGetForm()
@@ -39,6 +41,7 @@ describe('ipc wrappers', () => {
       'install_opencode',
       'openwork_status',
       'install_openwork',
+      'launch_openwork',
       'smoke_test',
       'portal_start_login',
       'portal_get_form',

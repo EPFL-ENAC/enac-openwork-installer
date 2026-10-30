@@ -10,9 +10,11 @@ import {
   writeProviderConfig,
   type WriteOutcome,
 } from '../../lib/provider-config'
+import { useFlow } from '../../stores/flow'
 
 const emit = defineEmits<{ done: [] }>()
 const { t } = useI18n()
+const { results } = useFlow()
 
 const configPath = displayPath(CONFIG_PATH)
 const backupPath = displayPath(BACKUP_PATH)
@@ -45,9 +47,14 @@ const message = computed(() => {
 })
 
 const run = async () => {
+  const token = results.rcpKey?.token
+  if (!token) {
+    outcome.value = { ok: false, code: 'io', detail: t('steps.providerConfig.missingKey') }
+    return
+  }
   busy.value = true
   try {
-    const result = await writeProviderConfig()
+    const result = await writeProviderConfig(token)
     outcome.value = result
     if (result.ok && !written.value) {
       written.value = true

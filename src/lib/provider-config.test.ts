@@ -22,7 +22,9 @@ import {
 
 type Config = Record<string, any>
 
-const config = (): Config => mergeProviderConfig(null) as Config
+const API_KEY = 'sk-test-key'
+
+const config = (): Config => mergeProviderConfig(null, API_KEY) as Config
 const epfl = (value: Config) => value.providers[PROVIDER_ID]
 
 beforeEach(() => {
@@ -42,7 +44,7 @@ describe('mergeProviderConfig', () => {
     expect(epfl(merged)).toMatchObject({
       name: 'RCP AI Inference as a Service',
       package: 'aisdk:@ai-sdk/openai-compatible',
-      settings: { baseURL: RCP_BASE_URL },
+      settings: { baseURL: RCP_BASE_URL, apiKey: API_KEY },
     })
     expect(Object.keys(epfl(merged).models)).toEqual(['epfl-aiaas/large', 'epfl-aiaas/small'])
   })
@@ -54,7 +56,7 @@ describe('mergeProviderConfig', () => {
       providers: { anthropic: { name: 'Anthropic', options: { timeout: 30 } } },
     }
 
-    const merged = mergeProviderConfig(existing) as Config
+    const merged = mergeProviderConfig(existing, API_KEY) as Config
 
     expect(merged.theme).toBe('dark')
     expect(merged.model).toBe('anthropic/claude')
@@ -70,7 +72,7 @@ describe('mergeProviderConfig', () => {
       },
     }
 
-    const merged = mergeProviderConfig(existing) as Config
+    const merged = mergeProviderConfig(existing, API_KEY) as Config
 
     expect(epfl(merged).name).toBe('RCP AI Inference as a Service')
     expect(epfl(merged).models.old).toBeUndefined()
@@ -79,8 +81,8 @@ describe('mergeProviderConfig', () => {
   })
 
   it('is idempotent on re-run', () => {
-    const first = mergeProviderConfig(null)
-    const second = mergeProviderConfig(first)
+    const first = mergeProviderConfig(null, API_KEY)
+    const second = mergeProviderConfig(first, API_KEY)
 
     expect(second).toEqual(first)
     expect(JSON.stringify(second)).toBe(JSON.stringify(first))
@@ -90,24 +92,24 @@ describe('mergeProviderConfig', () => {
     const existing = { providers: { local: { name: 'Local' } } }
     const before = JSON.stringify(existing)
 
-    mergeProviderConfig(existing)
+    mergeProviderConfig(existing, API_KEY)
 
     expect(JSON.stringify(existing)).toBe(before)
   })
 
-  it('keeps no apiKey in the config, per the RCP wiki', () => {
-    expect(JSON.stringify(config())).not.toContain('apiKey')
+  it('writes the API key into the RCP provider settings', () => {
+    expect(epfl(config()).settings.apiKey).toBe(API_KEY)
   })
 
   it('replaces a non-object providers value and keeps sibling keys', () => {
-    const merged = mergeProviderConfig({ providers: ['broken'], autoupdate: false }) as Config
+    const merged = mergeProviderConfig({ providers: ['broken'], autoupdate: false }, API_KEY) as Config
 
     expect(merged.autoupdate).toBe(false)
     expect(epfl(merged).package).toBe('aisdk:@ai-sdk/openai-compatible')
   })
 
   it('keeps a user provided $schema', () => {
-    expect(mergeProviderConfig({ $schema: 'custom' })).toMatchObject({ $schema: 'custom' })
+    expect(mergeProviderConfig({ $schema: 'custom' }, API_KEY)).toMatchObject({ $schema: 'custom' })
   })
 })
 
@@ -124,7 +126,7 @@ describe('displayPath', () => {
 
 describe('writeProviderConfig', () => {
   it('creates the config file without a backup', async () => {
-    const outcome = await writeProviderConfig()
+    const outcome = await writeProviderConfig(API_KEY)
 
     expect(outcome).toMatchObject({ ok: true, backupCreated: false, changed: true })
     expect(fs.copyFile).not.toHaveBeenCalled()
@@ -140,7 +142,7 @@ describe('writeProviderConfig', () => {
     fs.exists.mockImplementation(async (path: string) => path === CONFIG_PATH)
     fs.readTextFile.mockResolvedValue(JSON.stringify({ theme: 'dark' }))
 
-    const outcome = await writeProviderConfig()
+    const outcome = await writeProviderConfig(API_KEY)
 
     expect(outcome).toMatchObject({ ok: true, backupCreated: true, changed: true })
     expect(fs.copyFile).toHaveBeenCalledWith(CONFIG_PATH, BACKUP_PATH, expect.anything())
@@ -151,18 +153,18 @@ describe('writeProviderConfig', () => {
     fs.exists.mockImplementation(async (path: string) => [CONFIG_PATH, BACKUP_PATH].includes(path))
     fs.readTextFile.mockResolvedValue(JSON.stringify({ theme: 'dark' }))
 
-    const outcome = await writeProviderConfig()
+    const outcome = await writeProviderConfig(API_KEY)
 
     expect(outcome).toMatchObject({ ok: true, backupCreated: false, changed: true })
     expect(fs.copyFile).not.toHaveBeenCalled()
   })
 
   it('writes nothing when the config is already merged', async () => {
-    const merged = mergeProviderConfig({ theme: 'dark' })
+    const merged = mergeProviderConfig({ theme: 'dark' }, API_KEY)
     fs.exists.mockResolvedValue(true)
     fs.readTextFile.mockResolvedValue(JSON.stringify(merged))
 
-    const outcome = await writeProviderConfig()
+    const outcome = await writeProviderConfig(API_KEY)
 
     expect(outcome).toMatchObject({ ok: true, changed: false, backupCreated: false })
     expect(fs.copyFile).not.toHaveBeenCalled()
@@ -173,7 +175,7 @@ describe('writeProviderConfig', () => {
     fs.exists.mockResolvedValue(true)
     fs.readTextFile.mockResolvedValue('{ broken')
 
-    const outcome = await writeProviderConfig()
+    const outcome = await writeProviderConfig(API_KEY)
 
     expect(outcome).toMatchObject({ ok: false, code: 'invalid-json' })
     expect(fs.copyFile).not.toHaveBeenCalled()
@@ -184,7 +186,7 @@ describe('writeProviderConfig', () => {
     fs.exists.mockResolvedValue(true)
     fs.readTextFile.mockRejectedValue(new Error('forbidden path'))
 
-    const outcome = await writeProviderConfig()
+    const outcome = await writeProviderConfig(API_KEY)
 
     expect(outcome).toMatchObject({ ok: false, code: 'io' })
     expect(fs.writeTextFile).not.toHaveBeenCalled()

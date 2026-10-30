@@ -14,11 +14,10 @@ export type JsonObject = Record<string, unknown>
 
 // Local copy of the RCP wiki reference page https://wiki.rcp.epfl.ch/home/AIaaS/compatible-tools,
 // OpenCode v2 example. Re-check it when RCP publishes new models or prices.
-// No apiKey: the wiki keeps the key out of opencode.json.
-export const rcpProvider = (): JsonObject => ({
+export const rcpProvider = (apiKey: string): JsonObject => ({
   name: 'RCP AI Inference as a Service',
   package: 'aisdk:@ai-sdk/openai-compatible',
-  settings: { baseURL: RCP_BASE_URL },
+  settings: { baseURL: RCP_BASE_URL, apiKey },
   models: {
     'epfl-aiaas/large': {
       name: 'RCP AIaaS Large',
@@ -60,10 +59,10 @@ export function currentPlatform(): string {
  * Returns a copy of `existing` with the RCP provider added or updated in place.
  * Other providers, user settings and an existing `$schema` are kept untouched.
  */
-export function mergeProviderConfig(existing: object | null): JsonObject {
+export function mergeProviderConfig(existing: object | null, apiKey: string): JsonObject {
   const base = isObject(existing) ? clone(existing) : {}
   const providers = isObject(base.providers) ? base.providers : {}
-  providers[PROVIDER_ID] = rcpProvider()
+  providers[PROVIDER_ID] = rcpProvider(apiKey)
   return { $schema: CONFIG_SCHEMA, ...base, providers }
 }
 
@@ -74,7 +73,7 @@ export type WriteOutcome =
   | { ok: false; code: ProviderConfigErrorCode; detail: string }
 
 /** Reads, merges, backs up (once) and writes the global OpenCode config. */
-export async function writeProviderConfig(): Promise<WriteOutcome> {
+export async function writeProviderConfig(apiKey: string): Promise<WriteOutcome> {
   const paths = {
     configPath: displayPath(CONFIG_PATH),
     backupPath: displayPath(BACKUP_PATH),
@@ -99,7 +98,7 @@ export async function writeProviderConfig(): Promise<WriteOutcome> {
       previous = parsed
     }
 
-    const merged = mergeProviderConfig(previous)
+    const merged = mergeProviderConfig(previous, apiKey)
     const changed = previous === null || JSON.stringify(previous) !== JSON.stringify(merged)
     if (!changed) return { ok: true, ...paths, changed: false, backupCreated: false }
 

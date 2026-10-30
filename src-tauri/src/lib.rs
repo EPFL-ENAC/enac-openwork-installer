@@ -17,6 +17,7 @@ pub fn run() {
             opencode::install_opencode,
             openwork::openwork_status,
             openwork::install_openwork,
+            openwork::launch_openwork,
             smoke::smoke_test,
             portal::portal_start_login,
             portal::portal_get_form,

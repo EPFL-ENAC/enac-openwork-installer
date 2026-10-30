@@ -1,6 +1,7 @@
 use crate::types::{AppError, InstallResult, InstallStatus};
 use crate::util::{self, Logger};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::Duration;
 
 pub const RELEASE_URL: &str = "https://api.github.com/repos/different-ai/openwork/releases/latest";
@@ -81,6 +82,51 @@ pub async fn install_openwork(app: tauri::AppHandle) -> Result<InstallResult, Ap
         _ => Err(AppError::io(
             "the OpenWork installer finished but no installation was found",
         )),
+    }
+}
+
+#[tauri::command]
+pub async fn launch_openwork() -> Result<(), AppError> {
+    util::spawn_blocking(launch_blocking).await?
+}
+
+fn launch_blocking() -> Result<(), AppError> {
+    let status = status_blocking();
+    if !status.installed {
+        return Err(AppError::new("unsupported", "OpenWork is not installed"));
+    }
+    match util::platform() {
+        "macos" => {
+            let target = status
+                .path
+                .unwrap_or_else(|| "/Applications/OpenWork.app".to_string());
+            Command::new("open")
+                .arg(target)
+                .spawn()
+                .map_err(|e| AppError::io(format!("cannot launch OpenWork: {e}")))?;
+            Ok(())
+        }
+        "windows" => {
+            let path = status
+                .path
+                .ok_or_else(|| AppError::new("unsupported", "OpenWork is not installed"))?;
+            Command::new(windows_launch_target(&path))
+                .spawn()
+                .map_err(|e| AppError::io(format!("cannot launch OpenWork: {e}")))?;
+            Ok(())
+        }
+        other => Err(AppError::new(
+            "unsupported",
+            format!("cannot launch OpenWork on {other}"),
+        )),
+    }
+}
+
+fn windows_launch_target(path: &str) -> PathBuf {
+    let path = PathBuf::from(path);
+    match path.extension().and_then(|ext| ext.to_str()) {
+        Some(ext) if ext.eq_ignore_ascii_case("exe") => path,
+        _ => path.join("OpenWork.exe"),
     }
 }
 
@@ -377,6 +423,18 @@ mod tests {
     fn rejects_a_release_without_assets() {
         assert_eq!(parse_release("{}").unwrap_err().kind, "parse");
         assert_eq!(parse_release("not json").unwrap_err().kind, "parse");
+    }
+
+    #[test]
+    fn windows_launch_target_appends_the_exe_to_a_directory() {
+        assert_eq!(
+            windows_launch_target(r"C:\Programs\OpenWork"),
+            PathBuf::from(r"C:\Programs\OpenWork").join("OpenWork.exe")
+        );
+        assert_eq!(
+            windows_launch_target(r"C:\Programs\OpenWork\OpenWork.exe"),
+            PathBuf::from(r"C:\Programs\OpenWork\OpenWork.exe")
+        );
     }
 
     #[test]

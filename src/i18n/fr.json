@@ -85,7 +85,8 @@
       "backupCreated": "Votre fichier précédent a été enregistré en sauvegarde.",
       "invalidJson": "Le fichier de configuration n'est pas un JSON valide. Corrigez-le ou déplacez-le, puis réessayez. Détails : {detail}",
       "ioError": "Le fichier de configuration n'a pas pu être écrit : {detail}",
-      "keyHint": "Votre clé d'API n'est pas enregistrée dans ce fichier. OpenCode la lit dans votre environnement, ou depuis la connexion de l'étape précédente."
+      "keyHint": "Votre clé d'API RCP est écrite dans ce fichier. Gardez le fichier privé.",
+      "missingKey": "Aucune clé RCP n'est disponible depuis l'étape précédente."
     }
   },
   "shell": {

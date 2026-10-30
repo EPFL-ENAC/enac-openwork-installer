@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EpflButton } from '../../kit'
+import { launchOpenwork } from '../../lib/ipc'
 import { OPENWORK_DOCS_URL, OPENWORK_URL } from '../../lib/links'
 import { useFlow } from '../../stores/flow'
 
@@ -22,6 +23,14 @@ const configPaths = computed(() =>
     { label: t('summary.openwork'), path: results.openwork?.path },
   ].filter((entry) => entry.path),
 )
+
+const launch = async () => {
+  try {
+    await launchOpenwork()
+  } catch {
+    emit('open-url', OPENWORK_URL)
+  }
+}
 
 const smokeText = computed(() => {
   const result = results.smokeTest
@@ -64,7 +73,7 @@ const smokeText = computed(() => {
     </div>
 
     <div class="actions">
-      <EpflButton @click="emit('open-url', OPENWORK_URL)">{{ t('summary.launch') }}</EpflButton>
+      <EpflButton @click="launch">{{ t('summary.launch') }}</EpflButton>
       <EpflButton variant="secondary" @click="emit('open-url', OPENWORK_DOCS_URL)">
         {{ t('summary.docsLink') }}
       </EpflButton>

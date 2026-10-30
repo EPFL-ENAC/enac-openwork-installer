@@ -58,10 +58,6 @@ impl AppError {
         }
     }
 
-    pub fn unimplemented(command: &str) -> Self {
-        Self::new("unimplemented", format!("{command} is not implemented yet"))
-    }
-
     pub fn io(message: impl Into<String>) -> Self {
         Self::new("io", message)
     }
@@ -100,12 +96,5 @@ mod tests {
             serde_json::to_value(&form).unwrap(),
             json!({ "units": ["ENAC"], "existingOpenWorkKey": true })
         );
-    }
-
-    #[test]
-    fn unimplemented_error_has_the_contract_kind() {
-        let error = AppError::unimplemented("smoke_test");
-        assert_eq!(error.kind, "unimplemented");
-        assert_eq!(error.message, "smoke_test is not implemented yet");
     }
 }

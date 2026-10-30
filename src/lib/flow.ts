@@ -17,6 +17,7 @@ export interface StepResult {
   ok?: boolean
   detail?: string
   keyName?: string
+  token?: string
 }
 
 export type StepDonePayload = Partial<Omit<StepResult, 'status'>> & { status?: StepStatus }
