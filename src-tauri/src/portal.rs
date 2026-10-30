@@ -15,6 +15,11 @@ const LOGIN_WINDOW_LABEL: &str = "portal-login";
 const LOGIN_TIMEOUT_SECS: u64 = 600;
 const COOKIE_POLL_MS: u64 = 1000;
 const COOKIE_POLL_MAX_ERRORS: u32 = 15;
+const PORTAL_HOST: &str = "portal.rcp.epfl.ch";
+
+fn is_portal_page(url: &reqwest::Url) -> bool {
+    url.host_str() == Some(PORTAL_HOST) && url.path().starts_with("/aiaas")
+}
 
 // Security: sessionid, csrf, and token live here in memory only. Never log them,
 // never persist them, never put them into AppError messages.
@@ -83,9 +88,18 @@ impl PortalState {
         })
     }
 
-    fn set_form(&self, csrf: &str, form_url: &str, units: &[String]) {
+    fn set_form(
+        &self,
+        csrf: &str,
+        csrftoken: Option<&str>,
+        form_url: &str,
+        units: &[String],
+    ) {
         let mut session = self.lock();
         session.csrf = Some(csrf.to_string());
+        if csrftoken.is_some() {
+            session.csrftoken = csrftoken.map(str::to_string);
+        }
         session.form_url = Some(form_url.to_string());
         session.units = units.to_vec();
     }
@@ -135,6 +149,9 @@ pub async fn portal_start_login<R: tauri::Runtime>(
     WebviewWindowBuilder::new(&app, LOGIN_WINDOW_LABEL, WebviewUrl::External(login_url.clone()))
         .title("EPFL portal sign in")
         .inner_size(960.0, 720.0)
+        // In-memory cookie store on all three desktop engines (wry keeps the cookie API
+        // pointed at the same ephemeral store), so the portal session never hits disk.
+        .incognito(true)
         .build()
         .map_err(|error| AppError::new("io", format!("Could not open the sign-in window: {error}")))?;
 
@@ -153,6 +170,9 @@ pub async fn portal_start_login<R: tauri::Runtime>(
                 // The window can also be briefly absent while this command rebuilds it;
                 // re-check once before reporting the window as closed.
                 tokio::time::sleep(Duration::from_millis(COOKIE_POLL_MS * 2)).await;
+                if login_state.login_generation() != generation {
+                    return;
+                }
                 if poll_app.get_webview_window(LOGIN_WINDOW_LABEL).is_none() {
                     emit_login_result(
                         &poll_app,
@@ -164,8 +184,10 @@ pub async fn portal_start_login<R: tauri::Runtime>(
                 continue;
             };
             if Instant::now() >= deadline {
-                let _ = window.destroy();
-                emit_login_result(&poll_app, false, Some("The portal sign-in timed out. Try again."));
+                if login_state.login_generation() == generation {
+                    let _ = window.destroy();
+                    emit_login_result(&poll_app, false, Some("The portal sign-in timed out. Try again."));
+                }
                 return;
             }
             // cookies_for_url deadlocks when called from a sync command on Windows (wry#583),
@@ -173,12 +195,14 @@ pub async fn portal_start_login<R: tauri::Runtime>(
             let Ok(cookies) = window.cookies_for_url(login_url.clone()) else {
                 cookie_errors += 1;
                 if cookie_errors >= COOKIE_POLL_MAX_ERRORS {
-                    let _ = window.destroy();
-                    emit_login_result(
-                        &poll_app,
-                        false,
-                        Some("The sign-in window cannot expose cookies on this platform. Use the manual paste fallback."),
-                    );
+                    if login_state.login_generation() == generation {
+                        let _ = window.destroy();
+                        emit_login_result(
+                            &poll_app,
+                            false,
+                            Some("The sign-in window cannot expose cookies on this platform. Use the manual paste fallback."),
+                        );
+                    }
                     return;
                 }
                 continue;
@@ -189,9 +213,14 @@ pub async fn portal_start_login<R: tauri::Runtime>(
                 .map(|cookie| format!("{}={}", cookie.name(), cookie.value()))
                 .collect();
             if let Some(sessionid) = extract_sessionid(&cookie_strings) {
-                login_state.set_session(&sessionid, extract_cookie_value(&cookie_strings, "csrftoken").as_deref());
-                emit_login_result(&poll_app, true, None);
-                let _ = window.close();
+                if login_state.login_generation() == generation {
+                    login_state.set_session(
+                        &sessionid,
+                        extract_cookie_value(&cookie_strings, "csrftoken").as_deref(),
+                    );
+                    emit_login_result(&poll_app, true, None);
+                    let _ = window.close();
+                }
                 return;
             }
         }
@@ -246,20 +275,23 @@ pub async fn portal_create_key(
         .await
         .map_err(|error| AppError::new("network", format!("The key creation request failed: {error}")))?;
     let status = response.status();
-    let final_url = response.url().to_string();
+    let final_url = response.url().clone();
     let body = response
         .text()
         .await
         .map_err(|error| AppError::new("network", format!("Could not read the key creation response: {error}")))?;
 
-    if !reqwest::Url::parse(&final_url)
-        .map(|url| url.path().starts_with("/aiaas"))
-        .unwrap_or(false)
-    {
+    if !is_portal_page(&final_url) {
         return Err(AppError::new(
             "portal-auth",
             "The portal ended the session during key creation. Sign in again.",
         ));
+    }
+    // Token first: a success page may carry unrelated error-styled elements, and the
+    // token is the only signal that the key was really created.
+    if let Some(token) = extract_token(&body) {
+        state.set_token(&token);
+        return Ok(CreatedKey { name, token });
     }
     if let Some(message) = extract_error_message(&body) {
         return Err(AppError::new("portal-refused", message));
@@ -276,14 +308,10 @@ pub async fn portal_create_key(
             format!("The portal server failed (HTTP {}).", status.as_u16()),
         ));
     }
-    let Some(token) = extract_token(&body) else {
-        return Err(AppError::new(
-            "parse",
-            "The portal did not reveal the new API token. Check the portal in a browser.",
-        ));
-    };
-    state.set_token(&token);
-    Ok(CreatedKey { name, token })
+    Err(AppError::new(
+        "parse",
+        "The portal did not reveal the new API token. Check the portal in a browser.",
+    ))
 }
 
 #[tauri::command]
@@ -308,6 +336,7 @@ fn portal_client() -> Result<reqwest::Client, AppError> {
 struct FetchedPage {
     final_url: String,
     body: String,
+    set_cookies: Vec<String>,
 }
 
 async fn fetch_page(
@@ -327,13 +356,19 @@ async fn fetch_page(
         .await
         .map_err(|error| AppError::new("network", format!("Could not reach the portal: {error}")))?;
     let status = response.status();
-    let final_url = response.url().to_string();
-    if !response.url().path().starts_with("/aiaas") {
+    let final_url = response.url().clone();
+    if !is_portal_page(&final_url) {
         return Err(AppError::new(
             "portal-auth",
             "The portal redirected to a sign-in page. Sign in again.",
         ));
     }
+    let set_cookies: Vec<String> = response
+        .headers()
+        .get_all(reqwest::header::SET_COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok().map(str::to_string))
+        .collect();
     let body = response
         .text()
         .await
@@ -350,7 +385,11 @@ async fn fetch_page(
             format!("The portal server failed (HTTP {}).", status.as_u16()),
         ));
     }
-    Ok(FetchedPage { final_url, body })
+    Ok(FetchedPage {
+        final_url: final_url.to_string(),
+        body,
+        set_cookies,
+    })
 }
 
 struct FormFetch {
@@ -371,17 +410,34 @@ async fn load_portal_form(state: &PortalState) -> Result<FormFetch, AppError> {
     )
     .await?;
     let existing_open_work_key = detect_existing_key(&overview.body);
-    let (csrf, form_url, units) = match parse_form(&overview.body) {
-        Ok(parsed) => (parsed.csrf, overview.final_url, parsed.units),
-        Err(_) => {
-            let form_url = find_form_url(&overview.body, PORTAL_BASE)
-                .unwrap_or_else(|| format!("{PORTAL_BASE}{FORM_PATH}"));
+    // Prefer the page linked from the overview; an inline form on the overview and the
+    // constant fallback are only used when the overview carries no create link.
+    let (csrf, form_url, units, set_cookies) = match find_form_url(&overview.body, PORTAL_BASE) {
+        Some(form_url) => {
             let page = fetch_page(&client, &form_url, &cookie_header, Some(&overview.final_url)).await?;
             let parsed = parse_form(&page.body)?;
-            (parsed.csrf, page.final_url, parsed.units)
+            (parsed.csrf, page.final_url, parsed.units, page.set_cookies)
         }
+        None => match parse_form(&overview.body) {
+            Ok(parsed) => (
+                parsed.csrf,
+                overview.final_url.clone(),
+                parsed.units,
+                overview.set_cookies.clone(),
+            ),
+            Err(_) => {
+                let form_url = format!("{PORTAL_BASE}{FORM_PATH}");
+                let page = fetch_page(&client, &form_url, &cookie_header, Some(&overview.final_url)).await?;
+                let parsed = parse_form(&page.body)?;
+                (parsed.csrf, page.final_url, parsed.units, page.set_cookies)
+            }
+        },
     };
-    state.set_form(&csrf, &form_url, &units);
+    // Django pairs the parsed csrfmiddlewaretoken with a csrftoken cookie. When our GET
+    // had no csrftoken cookie, the form response sets a fresh one: use it over the
+    // webview's value, otherwise the POST would fail the CSRF check.
+    let csrftoken = extract_cookie_value(&set_cookies, "csrftoken");
+    state.set_form(&csrf, csrftoken.as_deref(), &form_url, &units);
     Ok(FormFetch {
         units,
         existing_open_work_key,
@@ -768,6 +824,27 @@ mod tests {
     }
 
     #[test]
+    fn token_wins_over_error_styling_on_success_pages() {
+        let mixed = r#"
+            <div class="alert alert-danger" role="alert">Legacy notice, ignore.</div>
+            <p>Your new token:</p>
+            <input id="id_token" value="rk-live-mixed000111222333">
+        "#;
+        assert_eq!(extract_token(mixed).as_deref(), Some("rk-live-mixed000111222333"));
+        assert_eq!(extract_token(REFUSED), None);
+    }
+
+    #[test]
+    fn portal_page_check_needs_host_and_aiaas_path() {
+        let ok: reqwest::Url = "https://portal.rcp.epfl.ch/aiaas/keys".parse().unwrap();
+        let wrong_host: reqwest::Url = "https://evil.example.com/aiaas/keys".parse().unwrap();
+        let wrong_path: reqwest::Url = "https://portal.rcp.epfl.ch/accounts/login".parse().unwrap();
+        assert!(is_portal_page(&ok));
+        assert!(!is_portal_page(&wrong_host));
+        assert!(!is_portal_page(&wrong_path));
+    }
+
+    #[test]
     fn form_url_discovery_from_overview_page() {
         assert_eq!(
             find_form_url(OVERVIEW, PORTAL_BASE).as_deref(),
@@ -803,7 +880,12 @@ mod tests {
         app.manage(PortalState::default());
         let state = app.state::<PortalState>();
         state.set_session("sid-123", None);
-        state.set_form("csrf-456", "https://portal.rcp.epfl.ch/aiaas/keys/new", &["ENAC-IT".into()]);
+        state.set_form(
+            "csrf-456",
+            Some("csrfCookie789"),
+            "https://portal.rcp.epfl.ch/aiaas/keys/new",
+            &["ENAC-IT".into()],
+        );
         state.set_token("tok-789");
 
         tauri::async_runtime::block_on(portal_close(app.handle().clone(), app.state::<PortalState>()))
