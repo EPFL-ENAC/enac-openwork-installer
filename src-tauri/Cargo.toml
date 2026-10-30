@@ -21,6 +21,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 scraper = "0.29"
 form_urlencoded = "1"
 tokio = { version = "1", default-features = false, features = ["time"] }
+tauri-plugin-fs = "2"
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }
