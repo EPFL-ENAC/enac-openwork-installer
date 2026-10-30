@@ -43,8 +43,10 @@ pub fn platform() -> &'static str {
 pub fn arch() -> &'static str {
     if cfg!(target_arch = "aarch64") {
         "aarch64"
-    } else {
+    } else if cfg!(target_arch = "x86_64") {
         "x86_64"
+    } else {
+        "unsupported"
     }
 }
 

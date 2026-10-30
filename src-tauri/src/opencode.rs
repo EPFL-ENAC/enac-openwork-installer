@@ -4,9 +4,10 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub const INSTALL_SCRIPT_URL: &str = "https://opencode.ai/v2/install";
-const ZIP_BASE_URL: &str = "https://opencode.ai/update/api/latest/cli/opencode";
+const RELEASE_BASE_URL: &str = "https://opencode.ai/update/api/latest/cli/opencode";
 const SCRIPT_TIMEOUT: Duration = Duration::from_secs(600);
 const STATUS_TIMEOUT: Duration = Duration::from_secs(60);
+const LIBC_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[tauri::command]
 pub async fn opencode_status() -> Result<InstallStatus, AppError> {
@@ -33,11 +34,12 @@ pub async fn install_opencode(app: tauri::AppHandle) -> Result<InstallResult, Ap
     let platform = util::platform();
     let installed = match platform {
         "macos" => install_macos(&log).await?,
+        "linux" => install_linux(&log).await?,
         "windows" => install_windows(&log).await?,
         other => {
             return Err(AppError::new(
                 "unsupported",
-                format!("OpenCode V2 installs on macOS and Windows only, this host runs {other}"),
+                format!("OpenCode V2 installs on macOS, Linux and Windows only, this host runs {other}"),
             ))
         }
     };
@@ -53,7 +55,7 @@ pub async fn install_opencode(app: tauri::AppHandle) -> Result<InstallResult, Ap
     })
 }
 
-async fn install_macos(log: &Logger) -> Result<PathBuf, AppError> {
+async fn run_install_script(log: &Logger) -> Result<Option<PathBuf>, AppError> {
     let client = util::client()?;
     log.log("downloading the OpenCode install script");
     let script = util::fetch_text(&client, INSTALL_SCRIPT_URL).await?;
@@ -67,17 +69,76 @@ async fn install_macos(log: &Logger) -> Result<PathBuf, AppError> {
     util::remove_dir(&dir);
     match result {
         Ok(_) => match binary_path() {
-            Some(path) => Ok(path),
+            Some(path) => Ok(Some(path)),
             None => {
-                log.log("the install script left no binary, falling back to the release zip");
-                install_zip(&client, log).await
+                log.log("the install script left no binary behind");
+                Ok(None)
             }
         },
         Err(error) => {
-            log.log(format!("{}; falling back to the release zip", error.message));
-            install_zip(&client, log).await
+            log.log(error.message);
+            Ok(None)
         }
     }
+}
+
+async fn install_macos(log: &Logger) -> Result<PathBuf, AppError> {
+    let installed = match run_install_script(log).await? {
+        Some(path) => path,
+        None => {
+            log.log("falling back to the release zip");
+            install_zip(&util::client()?, log).await?
+        }
+    };
+    log_path_note(log, &installed);
+    Ok(installed)
+}
+
+async fn install_linux(log: &Logger) -> Result<PathBuf, AppError> {
+    let installed = match run_install_script(log).await? {
+        Some(path) => path,
+        None => {
+            log.log("falling back to the Linux tarball");
+            install_tar_gz(&util::client()?, log).await?
+        }
+    };
+    log_path_note(log, &installed);
+    Ok(installed)
+}
+
+async fn install_tar_gz(client: &reqwest::Client, log: &Logger) -> Result<PathBuf, AppError> {
+    let arch = linux_arch(util::arch()).ok_or_else(|| {
+        AppError::new(
+            "unsupported",
+            "no OpenCode release tarball exists for this architecture",
+        )
+    })?;
+    let libc = detect_libc().await?;
+    let asset = tar_asset_name(arch, libc);
+    let dir = util::temp_dir("opencode-tarball")?;
+    let archive = dir.join(&asset);
+    log.log(format!("downloading {asset}"));
+    let result = async {
+        util::download_to(client, &tar_url(&asset), &archive, log).await?;
+        let dest = home_install_dir()
+            .ok_or_else(|| AppError::io("cannot find the user home directory"))?;
+        log.log(format!("extracting the binary to {}", dest.display()));
+        extract_tar_gz(&archive, &dest)
+    }
+    .await;
+    util::remove_dir(&dir);
+    result
+}
+
+async fn detect_libc() -> Result<&'static str, AppError> {
+    util::spawn_blocking(|| {
+        let alpine = Path::new("/etc/alpine-release").exists();
+        let ldd = util::run_with_timeout(Path::new("ldd"), &["--version"], LIBC_PROBE_TIMEOUT)
+            .ok()
+            .map(|output| format!("{} {}", output.stdout, output.stderr));
+        libc_flavor(alpine, ldd.as_deref())
+    })
+    .await
 }
 
 async fn install_zip(client: &reqwest::Client, log: &Logger) -> Result<PathBuf, AppError> {
@@ -88,7 +149,7 @@ async fn install_zip(client: &reqwest::Client, log: &Logger) -> Result<PathBuf, 
         )
     })?;
     log.log(format!("downloading {asset}"));
-    let bytes = util::download_bytes(client, &zip_url(&asset)).await?;
+    let bytes = util::download_bytes(client, &release_url(&asset)).await?;
     let dir = home_install_dir()
         .ok_or_else(|| AppError::io("cannot find the user home directory"))?;
     log.log(format!("extracting the binary to {}", dir.display()));
@@ -186,8 +247,112 @@ pub fn zip_asset_name(platform: &str, arch: &str) -> Option<String> {
     Some(name.to_string())
 }
 
-pub fn zip_url(asset: &str) -> String {
-    format!("{ZIP_BASE_URL}/{asset}")
+pub fn release_url(asset: &str) -> String {
+    format!("{RELEASE_BASE_URL}/{asset}")
+}
+
+pub fn linux_arch(arch: &str) -> Option<&'static str> {
+    match arch {
+        "x86_64" => Some("x64"),
+        "aarch64" => Some("arm64"),
+        _ => None,
+    }
+}
+
+pub fn libc_flavor(alpine_release: bool, ldd_version: Option<&str>) -> &'static str {
+    let musl = alpine_release
+        || ldd_version.is_some_and(|version| version.to_lowercase().contains("musl"));
+    if musl {
+        "musl"
+    } else {
+        "glibc"
+    }
+}
+
+pub fn tar_asset_name(arch: &str, libc: &str) -> String {
+    if libc == "musl" {
+        format!("opencode-linux-{arch}-musl.tar.gz")
+    } else {
+        format!("opencode-linux-{arch}.tar.gz")
+    }
+}
+
+pub fn tar_url(asset: &str) -> String {
+    release_url(asset)
+}
+
+pub fn extract_tar_gz(archive_path: &Path, dest_dir: &Path) -> Result<PathBuf, AppError> {
+    let dest = dest_dir.join(bin_name());
+    if dest.exists() {
+        return Err(AppError::io(format!(
+            "{} already exists, it was not overwritten",
+            dest.display()
+        )));
+    }
+    let file = std::fs::File::open(archive_path)
+        .map_err(|e| AppError::io(format!("cannot open {}: {e}", archive_path.display())))?;
+    let reader = flate2::read::GzDecoder::new(std::io::BufReader::new(file));
+    let mut tarball = tar::Archive::new(reader);
+    let entries = tarball
+        .entries()
+        .map_err(|e| AppError::parse(format!("cannot read the OpenCode archive: {e}")))?;
+
+    for entry in entries {
+        let mut entry = entry
+            .map_err(|e| AppError::parse(format!("cannot read an entry of the OpenCode archive: {e}")))?;
+        let is_binary = entry
+            .path()
+            .map(|path| path.file_name().is_some_and(|name| name == bin_name()))
+            .unwrap_or(false);
+        if !is_binary || !entry.header().entry_type().is_file() {
+            continue;
+        }
+        std::fs::create_dir_all(dest_dir)
+            .map_err(|e| AppError::io(format!("cannot create {}: {e}", dest_dir.display())))?;
+        return write_executable(&dest, &mut entry);
+    }
+
+    Err(AppError::parse(
+        "the OpenCode archive holds no opencode binary",
+    ))
+}
+
+pub fn path_note(binary: &Path, path_var: Option<&std::ffi::OsStr>) -> Option<String> {
+    let dir = binary.parent()?;
+    let on_path = path_var
+        .is_some_and(|value| std::env::split_paths(value).any(|entry| entry == dir));
+    (!on_path).then(|| {
+        format!(
+            "{} is not on PATH in this session, start it with the full path or open a new terminal",
+            binary.display()
+        )
+    })
+}
+
+fn log_path_note(log: &Logger, binary: &Path) {
+    if let Some(note) = path_note(binary, std::env::var_os("PATH").as_deref()) {
+        log.log(note);
+    }
+}
+
+fn write_executable(dest: &Path, payload: &mut impl std::io::Read) -> Result<PathBuf, AppError> {
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(dest)
+        .map_err(|e| AppError::io(format!("cannot create {}: {e}", dest.display())))?;
+    std::io::copy(payload, &mut file)
+        .map_err(|e| AppError::io(format!("cannot write {}: {e}", dest.display())))?;
+    drop(file);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dest, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| AppError::io(format!("cannot make {} executable: {e}", dest.display())))?;
+    }
+
+    Ok(dest.to_path_buf())
 }
 
 pub fn extract_binary(zip_bytes: &[u8], dest_dir: &Path) -> Result<PathBuf, AppError> {
@@ -226,23 +391,7 @@ pub fn extract_binary(zip_bytes: &[u8], dest_dir: &Path) -> Result<PathBuf, AppE
     }
     std::fs::create_dir_all(dest_dir)
         .map_err(|e| AppError::io(format!("cannot create {}: {e}", dest_dir.display())))?;
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&dest)
-        .map_err(|e| AppError::io(format!("cannot create {}: {e}", dest.display())))?;
-    std::io::Write::write_all(&mut file, &payload)
-        .map_err(|e| AppError::io(format!("cannot write {}: {e}", dest.display())))?;
-    drop(file);
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| AppError::io(format!("cannot make {} executable: {e}", dest.display())))?;
-    }
-
-    Ok(dest)
+    write_executable(&dest, &mut payload.as_slice())
 }
 
 #[cfg(any(windows, test))]
@@ -404,7 +553,7 @@ mod tests {
         assert_eq!(zip_asset_name("windows", "aarch64"), None);
         assert_eq!(zip_asset_name("linux", "x86_64"), None);
         assert_eq!(
-            zip_url("opencode-darwin-arm64.zip"),
+            release_url("opencode-darwin-arm64.zip"),
             "https://opencode.ai/update/api/latest/cli/opencode/opencode-darwin-arm64.zip"
         );
     }
@@ -437,6 +586,100 @@ mod tests {
         let zip = zip_with(&[("package/README.md", b"docs")]);
         let err = extract_binary(&zip, &dir).unwrap_err();
         assert_eq!(err.kind, "parse");
+    }
+
+    fn tar_gz_with(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        {
+            let mut builder = tar::Builder::new(&mut gz);
+            for (name, body) in entries {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(body.len() as u64);
+                header.set_mode(0o755);
+                header.set_cksum();
+                builder.append_data(&mut header, *name, *body).unwrap();
+            }
+            builder.finish().unwrap();
+        }
+        gz.finish().unwrap()
+    }
+
+    #[test]
+    fn maps_linux_arch_to_tarball_asset_names() {
+        assert_eq!(linux_arch("x86_64"), Some("x64"));
+        assert_eq!(linux_arch("aarch64"), Some("arm64"));
+        assert_eq!(linux_arch("armv7"), None);
+        assert_eq!(tar_asset_name("x64", "glibc"), "opencode-linux-x64.tar.gz");
+        assert_eq!(
+            tar_asset_name("arm64", "musl"),
+            "opencode-linux-arm64-musl.tar.gz"
+        );
+        assert_eq!(
+            tar_url("opencode-linux-arm64-musl.tar.gz"),
+            "https://opencode.ai/update/api/latest/cli/opencode/opencode-linux-arm64-musl.tar.gz"
+        );
+    }
+
+    #[test]
+    fn detects_musl_from_alpine_or_ldd() {
+        let glibc = std::fs::read_to_string(fixture("ldd-version-glibc.txt")).unwrap();
+        let musl = std::fs::read_to_string(fixture("ldd-version-musl.txt")).unwrap();
+        assert_eq!(libc_flavor(false, Some(&glibc)), "glibc");
+        assert_eq!(libc_flavor(false, Some(&musl)), "musl");
+        assert_eq!(libc_flavor(true, Some(&glibc)), "musl");
+        assert_eq!(libc_flavor(false, None), "glibc");
+    }
+
+    #[test]
+    fn extracts_binary_from_nested_and_flat_tar_gz() {
+        let dir = temp_dir("tar-fixture");
+        let nested = dir.join("nested");
+        let out = extract_tar_gz(&fixture("opencode-linux-x64.tar.gz"), &nested).unwrap();
+        assert_eq!(out, nested.join(bin_name()));
+        assert_eq!(std::fs::read(&out).unwrap(), b"#!/bin/sh\necho 2.2.3\n");
+
+        let flat = dir.join("flat");
+        let archive = dir.join("flat.tar.gz");
+        std::fs::write(&archive, tar_gz_with(&[("opencode", b"root-bin")])).unwrap();
+        let out = extract_tar_gz(&archive, &flat).unwrap();
+        assert_eq!(out, flat.join(bin_name()));
+        assert_eq!(std::fs::read(&out).unwrap(), b"root-bin");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&out).unwrap().permissions().mode();
+            assert_eq!(mode & 0o111, 0o111);
+        }
+    }
+
+    #[test]
+    fn tar_gz_extract_refuses_to_overwrite_and_rejects_missing_binary() {
+        let dir = temp_dir("tar-existing");
+        let target = dir.join(bin_name());
+        std::fs::write(&target, b"keep").unwrap();
+        let archive = dir.join("overwrite.tar.gz");
+        std::fs::write(&archive, tar_gz_with(&[("opencode", b"new")])).unwrap();
+        let err = extract_tar_gz(&archive, &dir).unwrap_err();
+        assert_eq!(err.kind, "io");
+        assert_eq!(std::fs::read(&target).unwrap(), b"keep");
+
+        let empty = dir.join("empty");
+        let archive = dir.join("docs.tar.gz");
+        std::fs::write(&archive, tar_gz_with(&[("package/README.md", b"docs")])).unwrap();
+        let err = extract_tar_gz(&archive, &empty).unwrap_err();
+        assert_eq!(err.kind, "parse");
+        assert!(!empty.join(bin_name()).exists());
+    }
+
+    #[test]
+    fn notes_a_binary_that_is_outside_the_current_path() {
+        let binary = Path::new("/home/ada/.opencode/bin").join(bin_name());
+        let on_path = std::ffi::OsStr::new("/usr/bin:/home/ada/.opencode/bin");
+        assert_eq!(path_note(&binary, Some(on_path)), None);
+        let off_path = std::ffi::OsStr::new("/usr/bin");
+        let note = path_note(&binary, Some(off_path)).unwrap();
+        assert!(note.contains(&binary.display().to_string()));
+        assert!(path_note(&binary, None).is_some());
     }
 
     #[test]
