@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "EPFL OpenWork Setup"
+    "title": "EPFL OpenWork Installer"
   },
   "locale": {
     "label": "Language",
@@ -10,7 +10,7 @@
   "welcome": {
     "title": "Welcome",
     "intro": "This tool installs OpenCode and OpenWork on your computer.",
-    "overview": "What this setup does",
+    "overview": "What this installer does",
     "start": "Start"
   },
   "status": {
@@ -91,7 +91,7 @@
   },
   "shell": {
     "locked": "This step is locked. Finish the previous steps first.",
-    "stepsTitle": "Setup steps",
+    "stepsTitle": "Installation steps",
     "stepState": {
       "done": "Done",
       "skipped": "Skipped"
@@ -99,7 +99,7 @@
   },
   "network": {
     "title": "Network check",
-    "intro": "The setup checks that this computer can reach the EPFL RCP portal. Only key creation needs the EPFL network, the inference endpoint is public.",
+    "intro": "The installer checks that this computer can reach the EPFL RCP portal. Only key creation needs the EPFL network, the inference endpoint is public.",
     "checking": "Checking the connection to {host}...",
     "pass": "The EPFL network is reachable.",
     "fail": "The EPFL network is not reachable. If you are off campus, connect to the EPFL VPN.",
@@ -132,7 +132,7 @@
   },
   "openwork": {
     "title": "OpenWork",
-    "intro": "OpenWork is the EPFL work environment this setup installs.",
+    "intro": "OpenWork is the EPFL work environment this installer installs.",
     "installed": "OpenWork {version} is already installed.",
     "missing": "OpenWork is not installed on this computer.",
     "install": "Install OpenWork",
@@ -144,7 +144,7 @@
   },
   "summary": {
     "title": "Summary",
-    "intro": "Here is what this setup did.",
+    "intro": "Here is what this installer did.",
     "opencode": "OpenCode",
     "openwork": "OpenWork",
     "notInstalled": "Not installed",

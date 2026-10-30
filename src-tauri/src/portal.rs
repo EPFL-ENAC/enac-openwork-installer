@@ -346,7 +346,7 @@ pub async fn portal_close<R: tauri::Runtime>(
 
 fn portal_client() -> Result<reqwest::Client, AppError> {
     reqwest::Client::builder()
-        .user_agent(concat!("epfl-openwork-setup/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("epfl-openwork-installer/", env!("CARGO_PKG_VERSION")))
         // The portal is internal-only and can hang: bound every request so the
         // UI keeps control and can surface a typed network error.
         .timeout(Duration::from_secs(30))

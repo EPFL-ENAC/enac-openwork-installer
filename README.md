@@ -1,4 +1,4 @@
-# EPFL OpenWork Setup
+# EPFL OpenWork Installer
 
 Desktop installer for OpenWork, built with Tauri 2 and Vue 3.
 

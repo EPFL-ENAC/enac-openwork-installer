@@ -1,5 +1,5 @@
 {
-  "name": "epfl-openwork-setup",
+  "name": "epfl-openwork-installer",
   "private": true,
   "version": "0.1.0",
   "type": "module",
