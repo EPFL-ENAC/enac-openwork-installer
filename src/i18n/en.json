@@ -1,0 +1,19 @@
+{
+  "app": {
+    "title": "EPFL OpenWork Setup"
+  },
+  "locale": {
+    "label": "Language",
+    "en": "English",
+    "fr": "Français"
+  },
+  "welcome": {
+    "title": "Welcome",
+    "intro": "This tool installs OpenCode and OpenWork on your computer."
+  },
+  "status": {
+    "checking": "Checking the OpenCode installation...",
+    "installed": "OpenCode {version} is installed.",
+    "error": "OpenCode status unavailable: {message}"
+  }
+}

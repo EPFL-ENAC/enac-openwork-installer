@@ -1,0 +1,20 @@
+// EPFL brand → Quasar Sass variables (build-time path).
+// Quasar generates its color utility classes from these at build time, so they
+// must be literal values; this is a brand-source mapping (the linter exempts it).
+// The runtime equivalent is kits/quasar/epfl-quasar-brand.css — use whichever
+// fits your setup; you do not need both.
+
+$primary:   #FF0000; // --epfl-red / --primary
+$secondary: #007480; // --epfl-canard / --tertiary
+$accent:    #00A79F; // --epfl-leman
+$dark:      #212121; // --epfl-black / --bg-dark
+$dark-page: #212121; // --epfl-black
+
+$positive:  #7ED321; // --epfl-green / --success
+$negative:  #FF0000; // --epfl-red / --danger
+$info:      #4A90E2; // --epfl-blue / --info
+$warning:   #F5A623; // --epfl-orange / --warning
+
+// EPFL is Suisse Int'l everywhere. Load fonts via the design-system token layer
+// (tokens/colors_and_type.css) and set Quasar's font family to match:
+$typography-font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;

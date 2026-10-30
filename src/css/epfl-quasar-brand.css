@@ -1,0 +1,16 @@
+/* EPFL brand → Quasar (runtime, token-pure).
+   Import AFTER Quasar's CSS and after css/epfl.css. This remaps Quasar's brand
+   custom properties onto EPFL semantic tokens, so `text-primary`, `bg-primary`,
+   <q-btn color="primary">, etc. render in EPFL colors with zero hard-coded hex. */
+
+:root {
+  --q-primary:   var(--primary);    /* EPFL red */
+  --q-secondary: var(--tertiary);   /* Canard teal */
+  --q-accent:    var(--epfl-leman); /* Léman teal (editorial accent) */
+  --q-positive:  var(--success);
+  --q-negative:  var(--danger);
+  --q-info:      var(--info);
+  --q-warning:   var(--warning);
+  --q-dark:      var(--bg-dark);
+  --q-dark-page: var(--bg-dark);
+}
