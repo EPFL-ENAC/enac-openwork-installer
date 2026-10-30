@@ -38,6 +38,15 @@ export interface BackendLog {
   message: string
 }
 
+export interface OpenWorkState {
+  broken: boolean
+  databases: string[]
+}
+
+export interface StateRepair {
+  backups: string[]
+}
+
 export interface PortalLogin {
   ok: boolean
   error: string | null
@@ -48,6 +57,8 @@ export const installOpencode = () => invoke<InstallResult>('install_opencode')
 export const openworkStatus = () => invoke<InstallStatus>('openwork_status')
 export const installOpenwork = () => invoke<InstallResult>('install_openwork')
 export const launchOpenwork = () => invoke<void>('launch_openwork')
+export const openworkStateStatus = () => invoke<OpenWorkState>('openwork_state_status')
+export const openworkRepairState = () => invoke<StateRepair>('openwork_repair_state')
 export const smokeTest = () => invoke<SmokeResult>('smoke_test')
 export const portalStartLogin = () => invoke<void>('portal_start_login')
 export const portalGetForm = () => invoke<PortalForm>('portal_get_form')

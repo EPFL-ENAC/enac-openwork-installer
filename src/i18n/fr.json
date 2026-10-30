@@ -140,7 +140,15 @@
     "installDone": "OpenWork {version} est installé.",
     "skip": "Ignorer",
     "continue": "Continuer",
-    "progress": "Progression de l'installation"
+    "progress": "Progression de l'installation",
+    "stateBrokenTitle": "OpenWork ne démarre pas",
+    "stateBrokenDetail": "OpenWork s'arrête avec le message : Database is not empty and has no session table.",
+    "stateBrokenCause": "La cause est un fichier de base de données créé par une autre version d'OpenCode. OpenWork attend sa propre structure dans ce fichier et s'arrête donc au démarrage.",
+    "stateBrokenFix": "Cette installation peut déplacer le fichier vers une sauvegarde et le vider. OpenWork crée ensuite une nouvelle base de données à son prochain démarrage. La sauvegarde garde l'ancien contenu, rien n'est supprimé.",
+    "stateConsent": "J'accepte que cette installation déplace le fichier de base de données vers une sauvegarde.",
+    "stateRepair": "Sauvegarder et vider",
+    "stateRepairing": "Sauvegarde de la base de données...",
+    "stateRepaired": "La base de données est sauvegardée. OpenWork en crée une nouvelle à son prochain démarrage. Les fichiers de sauvegarde sont :"
   },
   "summary": {
     "title": "Résumé",

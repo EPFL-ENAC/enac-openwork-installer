@@ -1,5 +1,6 @@
 mod opencode;
 mod openwork;
+mod openwork_state;
 mod portal;
 mod smoke;
 mod types;
@@ -17,6 +18,8 @@ pub fn run() {
             openwork::openwork_status,
             openwork::install_openwork,
             openwork::launch_openwork,
+            openwork_state::openwork_state_status,
+            openwork_state::openwork_repair_state,
             smoke::smoke_test,
             portal::portal_start_login,
             portal::portal_get_form,

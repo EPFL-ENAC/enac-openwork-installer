@@ -140,7 +140,15 @@
     "installDone": "OpenWork {version} is installed.",
     "skip": "Skip",
     "continue": "Continue",
-    "progress": "Installation progress"
+    "progress": "Installation progress",
+    "stateBrokenTitle": "OpenWork cannot start",
+    "stateBrokenDetail": "OpenWork stops with the message: Database is not empty and has no session table.",
+    "stateBrokenCause": "The cause is a database file that another OpenCode version created. OpenWork expects its own layout in that file, so it stops at start.",
+    "stateBrokenFix": "This setup can move the file to a backup and clear it. OpenWork then creates a new database on its next start. The backup keeps the old content, nothing is deleted.",
+    "stateConsent": "I agree that this setup moves the database file to a backup.",
+    "stateRepair": "Back up and clear",
+    "stateRepairing": "Backing up the database...",
+    "stateRepaired": "The database is backed up. OpenWork creates a new one on its next start. The backup files are:"
   },
   "summary": {
     "title": "Summary",

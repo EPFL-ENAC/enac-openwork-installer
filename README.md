@@ -20,6 +20,18 @@ Application signing and notarization are not part of this release.
 
 Windows ships as a single portable `.exe`. There is no setup wizard and no installer. Download the file and run it. WebView2 Evergreen is already present on Windows 10 and 11.
 
+### OpenWork does not start on macOS
+
+OpenWork 0.18.63 can stop at start with this message:
+
+```
+OpenWork couldn't start - Unexpected error: Database is not empty and has no session table
+```
+
+The message comes from the OpenCode engine that OpenWork bundles, not from OpenWork itself. The engine reads the shared OpenCode database (`~/.local/share/opencode/*.db`), finds tables that an OpenCode v2 install created, and stops because it needs its own `session` table. The upstream fix is merged but not released, so no released OpenWork version avoids it. See [openwork#5610](https://github.com/different-ai/openwork/issues/5610) and [openwork#6662](https://github.com/different-ai/openwork/pull/6662).
+
+The OpenWork step of this setup detects the condition. It explains it, and with the consent checkbox it moves the database file and its `-wal` and `-shm` files to `<name>.bak-<timestamp>` next to the original. Nothing is deleted, and OpenWork creates a fresh database on its next start. Ceiling: the check exists only in this setup, and it can be removed when a released OpenWork version contains #6662.
+
 ## Updates
 
 There is no self-update. To update, download the new release from GitHub Releases and replace the old file.
@@ -68,6 +80,7 @@ Run this checklist on the EPFL network or VPN, on a Windows x64 machine and on a
 - [ ] Windows: the portable `.exe` starts with no admin prompt. A second run detects the existing OpenWork install and does not overwrite it.
 - [ ] macOS: the `.dmg` copies OpenWork to Applications. A second run detects the install and does not overwrite it.
 - [ ] macOS first start: right-click, select Open, and confirm. Windows first start: SmartScreen, More info, Run anyway. The README states both workarounds.
+- [ ] macOS with an old OpenCode database in `~/.local/share/opencode`: the OpenWork step shows the database warning. The repair button stays disabled until the consent checkbox is set. After the repair the backup files exist, and OpenWork starts.
 
 ### Secret checks
 
