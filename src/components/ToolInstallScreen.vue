@@ -20,6 +20,7 @@ type ScreenState = 'checking' | 'installed' | 'missing' | 'installing' | 'instal
 
 const state = ref<ScreenState>('checking')
 const version = ref<string | null>(null)
+const path = ref<string | null>(null)
 const error = ref<AppError | null>(null)
 const logLines = ref<string[]>([])
 
@@ -35,6 +36,7 @@ const checkStatus = async () => {
   try {
     const status = await props.status()
     version.value = status.installed ? status.version : null
+    path.value = status.path
     state.value = status.installed ? 'installed' : 'missing'
   } catch (cause) {
     error.value = cause as AppError
@@ -52,6 +54,7 @@ const runInstall = async () => {
     })
     const result = await props.install()
     version.value = result.version
+    path.value = result.path
     state.value = 'installDone'
   } catch (cause) {
     error.value = cause as AppError
@@ -77,7 +80,9 @@ onMounted(checkStatus)
         {{ t(`${props.i18nPrefix}.installed`, { version: version ?? '' }) }}
       </EpflAlert>
       <div class="actions">
-        <EpflButton @click="emit('done', { status: 'skipped', version: version ?? undefined })">
+        <EpflButton
+          @click="emit('done', { status: 'skipped', version: version ?? undefined, path: path ?? undefined })"
+        >
           {{ t(`${props.i18nPrefix}.skip`) }}
         </EpflButton>
       </div>
@@ -104,7 +109,9 @@ onMounted(checkStatus)
         {{ t(`${props.i18nPrefix}.installDone`, { version: version ?? '' }) }}
       </EpflAlert>
       <div class="actions">
-        <EpflButton @click="emit('done', { status: 'passed', version: version ?? undefined })">
+        <EpflButton
+          @click="emit('done', { status: 'passed', version: version ?? undefined, path: path ?? undefined })"
+        >
           {{ t(`${props.i18nPrefix}.continue`) }}
         </EpflButton>
       </div>

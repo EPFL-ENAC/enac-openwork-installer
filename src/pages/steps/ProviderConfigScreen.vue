@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { EpflButton } from '../../kit'
 import {
   BACKUP_PATH,
   CONFIG_PATH,
@@ -78,14 +79,9 @@ const run = async () => {
     <p class="provider">{{ PROVIDER_ID }}</p>
 
     <div class="actions">
-      <q-btn
-        color="primary"
-        :label="written ? t('steps.providerConfig.rerun') : t('steps.providerConfig.write')"
-        :loading="busy"
-        :disable="busy"
-        no-caps
-        @click="run"
-      />
+      <EpflButton :disabled="busy" @click="run">
+        {{ written ? t('steps.providerConfig.rerun') : t('steps.providerConfig.write') }}
+      </EpflButton>
     </div>
 
     <p v-if="busy" class="message" role="status">{{ t('steps.providerConfig.writing') }}</p>

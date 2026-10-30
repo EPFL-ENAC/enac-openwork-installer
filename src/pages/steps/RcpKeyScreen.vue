@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import '../../css/epfl.css'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { EpflButton } from '../../components/epfl'
+import { EpflButton } from '../../kit'
 import {
   onPortalLogin,
   portalClose,
@@ -180,7 +179,7 @@ onBeforeUnmount(() => {
     <h2>{{ t('rcpKey.title') }}</h2>
     <p class="intro">{{ t('rcpKey.intro') }}</p>
 
-    <p v-if="error" class="epfl-alert epfl-alert-danger" role="alert">
+    <p v-if="error && error.kind !== 'portal-auth'" class="epfl-alert epfl-alert-danger" role="alert">
       {{ t('rcpKey.error.generic', { kind: error.kind, message: error.message }) }}
     </p>
     <p v-if="notice" class="epfl-alert epfl-alert-warning" role="alert">{{ t(notice) }}</p>

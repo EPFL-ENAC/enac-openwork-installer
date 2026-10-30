@@ -55,7 +55,7 @@ const onOpenUrl = (url: string) => {
       <StepStepper :current="currentStep" class="app-stepper" />
       <div class="app-content">
         <EpflAlert v-if="stepLocked" variant="warning">{{ t('shell.locked') }}</EpflAlert>
-        <router-view @done="onDone" @open-url="onOpenUrl" />
+        <router-view v-else @done="onDone" @open-url="onOpenUrl" />
       </div>
     </main>
   </div>

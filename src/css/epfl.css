@@ -1,14 +1,9 @@
 /* EPFL design layer for this app: tokens plus the atoms and molecules the screens use.
    Copied from the EPFL design reference (epfl-design-skill), not from a package. */
 @import './epfl-tokens.css';
-@import './epfl/atoms/button.css';
 @import './epfl/atoms/form.css';
-@import './epfl/molecules/alert.css';
-/* EPFL Design System — bundle for this app.
-   Imports the vendored token layer's companion atomic layers in kit order. */
-
-@import "./epfl/button.css";
-@import "./epfl/badge.css";
-@import "./epfl/alert.css";
-@import "./epfl/card.css";
-@import "./epfl/layout.css";
+@import './epfl/button.css';
+@import './epfl/badge.css';
+@import './epfl/alert.css';
+@import './epfl/card.css';
+@import './epfl/layout.css';
