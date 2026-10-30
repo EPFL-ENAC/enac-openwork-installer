@@ -221,7 +221,7 @@ fn windows_status() -> Option<InstallStatus> {
     }
     let base = std::env::var_os("LOCALAPPDATA")
         .map(|dir| std::path::PathBuf::from(dir).join("Programs"))?;
-    for vendor in ["openwork", "OpenWork"] {
+    for vendor in ["@openworkdesktop", "OpenWork", "openwork"] {
         for exe in ["OpenWork.exe", "openwork.exe"] {
             let path = base.join(vendor).join(exe);
             if path.is_file() {
