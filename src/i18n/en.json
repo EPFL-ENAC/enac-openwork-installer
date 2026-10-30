@@ -172,6 +172,18 @@
     "error": "Something went wrong: {message}",
     "retry": "Retry"
   },
+  "trace": {
+    "title": "Trace",
+    "log": "Activity log",
+    "empty": "No activity yet.",
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "passed": "Passed",
+      "skipped": "Skipped",
+      "failed": "Failed"
+    }
+  },
   "stepTitles": {
     "welcome": "Welcome",
     "network": "Network check",

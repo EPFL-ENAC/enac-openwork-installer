@@ -172,6 +172,18 @@
     "error": "Une erreur est survenue : {message}",
     "retry": "Réessayer"
   },
+  "trace": {
+    "title": "Trace",
+    "log": "Journal d'activité",
+    "empty": "Aucune activité pour le moment.",
+    "status": {
+      "pending": "En attente",
+      "running": "En cours",
+      "passed": "Réussi",
+      "skipped": "Ignoré",
+      "failed": "Échec"
+    }
+  },
   "stepTitles": {
     "welcome": "Bienvenue",
     "network": "Vérification du réseau",
