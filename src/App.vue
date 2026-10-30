@@ -114,7 +114,7 @@ const onOpenUrl = (url: string) => {
   min-width: 0;
 }
 
-@media (max-width: 767.98px) {
+@media (max-width: 48rem) {
   .app-main {
     flex-direction: column;
     gap: var(--space-3);
