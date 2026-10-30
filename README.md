@@ -15,37 +15,14 @@ Application signing and notarization are not part of this release.
 
 | Platform | Runner | Target | Artifacts |
 | --- | --- | --- | --- |
-| Windows x64 | `windows-latest` | default | NSIS `.exe`, updater `.nsis.zip` |
-| macOS universal (arm64 and x64) | `macos-latest` | `universal-apple-darwin` | `.dmg`, updater `.app.tar.gz` |
+| Windows x64 | `windows-latest` | default | portable `.exe` |
+| macOS universal (arm64 and x64) | `macos-latest` | `universal-apple-darwin` | `.dmg` |
 
-Each job also uploads its signatures and a shared `latest.json` file to the GitHub Release.
+Windows ships as a single portable `.exe`. There is no setup wizard and no installer. Download the file and run it. WebView2 Evergreen is already present on Windows 10 and 11.
 
-## Auto-updater
+## Updates
 
-The application uses `tauri-plugin-updater`. The endpoint is:
-
-```
-https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/latest.json
-```
-
-The updater works only for an installed release build. It does not work in `tauri dev`.
-
-### Signing key
-
-The public key is in `src-tauri/tauri.conf.json` (`plugins.updater.pubkey`). Generate the keypair one time:
-
-```sh
-npm run tauri signer generate -- -w ~/.tauri/enac-openwork-installer.key
-```
-
-Store these repository secrets in GitHub (**Settings > Secrets and variables > Actions**):
-
-| Secret | Value |
-| --- | --- |
-| `TAURI_SIGNING_PRIVATE_KEY` | Contents of `~/.tauri/enac-openwork-installer.key` |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | The password that you entered during key generation |
-
-Never commit the private key. If you lose the private key or the password, existing installations cannot receive updates. In that case, generate a new keypair and put the new public key in `tauri.conf.json` in the next release.
+There is no self-update. To update, download the new release from GitHub Releases and replace the old file.
 
 ## Release process
 
@@ -58,10 +35,8 @@ Never commit the private key. If you lose the private key or the password, exist
    git push origin v0.1.0
    ```
 
-4. The `Release` workflow builds both platforms and publishes the GitHub Release. The tag must match the application version, because `latest.json` uses the application version.
-5. After the workflow succeeds, verify that the release contains the `.exe`, the `.dmg`, the updater artifacts, and `latest.json`.
-
-The `Release` workflow needs both signing secrets. If `TAURI_SIGNING_PRIVATE_KEY` is missing, the build fails, because the configuration contains a public key. The private key must match that public key.
+4. The `Release` workflow builds both platforms and publishes the GitHub Release.
+5. After the workflow succeeds, verify that the release contains the portable `.exe` and the `.dmg`.
 
 ## Live test checklist
 
@@ -90,7 +65,7 @@ Run this checklist on the EPFL network or VPN, on a Windows x64 machine and on a
 
 ### Installer checks, both platforms
 
-- [ ] Windows: the `.exe` installs per user with no admin prompt. A second run detects the install and does not overwrite it.
+- [ ] Windows: the portable `.exe` starts with no admin prompt. A second run detects the existing OpenWork install and does not overwrite it.
 - [ ] macOS: the `.dmg` copies OpenWork to Applications. A second run detects the install and does not overwrite it.
 - [ ] macOS first start: right-click, select Open, and confirm. Windows first start: SmartScreen, More info, Run anyway. The README states both workarounds.
 
@@ -103,9 +78,9 @@ Run this checklist on the EPFL network or VPN, on a Windows x64 machine and on a
 
 ### Release checks
 
-- [ ] The GitHub Release holds the NSIS `.exe`, the `.dmg`, the updater artifacts and `latest.json`.
-- [ ] Both build jobs used the signing secrets and finished green.
-- [ ] The updater endpoint in `latest.json` points at the same release.
+- [ ] The GitHub Release holds the portable `.exe` and the `.dmg`.
+- [ ] Both build jobs finished green.
+- [ ] The `.exe` runs on a machine without a previous install and without an admin prompt.
 
 ## Development
 

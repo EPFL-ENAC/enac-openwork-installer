@@ -15,9 +15,11 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
-            args: "--bundles nsis"
+            args: "--no-bundle"
+            plain: true
           - platform: macos-latest
             args: "--target universal-apple-darwin"
+            plain: false
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -40,14 +42,11 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "EPFL OpenWork Installer ${{ github.ref_name }}"
           releaseBody: "Unsigned build. See the README for install workarounds."
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: true
-          updaterJsonPreferNsis: true
+          uploadPlainBinary: ${{ matrix.plain }}
           args: ${{ matrix.args }}
