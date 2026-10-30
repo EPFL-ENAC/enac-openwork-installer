@@ -97,19 +97,9 @@ async fn install_zip(client: &reqwest::Client, log: &Logger) -> Result<PathBuf, 
 
 async fn install_windows(log: &Logger) -> Result<PathBuf, AppError> {
     let client = util::client()?;
+    let binary = install_zip(&client, log).await?;
     let dir = home_install_dir()
         .ok_or_else(|| AppError::io("cannot find the user home directory"))?;
-    let asset = zip_asset_name("windows", util::arch()).ok_or_else(|| {
-        AppError::new(
-            "unsupported",
-            "no OpenCode release zip exists for this architecture",
-        )
-    })?;
-    log.log(format!("downloading {asset}"));
-    let bytes = util::download_bytes(&client, &zip_url(&asset)).await?;
-    log.log(format!("extracting the binary to {}", dir.display()));
-    let binary = extract_binary(&bytes, &dir)?;
-
     log.log("adding the OpenCode directory to the user PATH");
     if set_user_path(&dir.display().to_string())? {
         log.log("user PATH updated, new terminals find opencode");
@@ -291,7 +281,7 @@ pub fn set_user_path(dir: &str) -> Result<bool, AppError> {
         .map_err(|e| AppError::io(format!("cannot open HKCU\\Environment: {e}")))?;
     let raw = key.get_raw_value("Path").ok();
     let (current, vtype) = match &raw {
-        Some(value) => (Some(decode_reg_string(value)?), value.vtype),
+        Some(value) => (Some(decode_reg_string(value)?), value.vtype.clone()),
         None => (None, RegType::REG_EXPAND_SZ),
     };
     let Some(updated) = append_to_user_path(current.as_deref(), dir) else {
