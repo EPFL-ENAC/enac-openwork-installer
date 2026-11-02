@@ -90,6 +90,7 @@ export const createOrchestrator = (
     if (from < 0) return
     const { [failedStep]: _dropped, ...kept } = results
     results = kept
+    failedStep = null
     await runFrom(from)
   }
 

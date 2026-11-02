@@ -221,6 +221,44 @@ describe('orchestrator retry', () => {
     expect(onComplete).toEqual(['welcome', 'opencode', 'rcpKey', 'openwork'])
   })
 
+  it('clears the failure surface while the failed step reruns', async () => {
+    const { sink, statuses } = harness()
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let attempt = 0
+    const flow = createOrchestrator(
+      [
+        {
+          id: 'openwork',
+          run: async () => {
+            attempt += 1
+            if (attempt === 1) return failed()
+            await gate
+            return passed()
+          },
+        },
+      ],
+      sink,
+    )
+
+    await flow.start()
+    expect(flow.failedStep).toBe('openwork')
+
+    const retrying = flow.retry()
+    await new Promise((resolve) => setTimeout(resolve, 5))
+
+    expect(flow.state).toBe('running')
+    expect(flow.failedStep).toBeNull()
+    expect(flow.results).toEqual({})
+    expect(statuses).toEqual({ openwork: 'running' })
+
+    release()
+    await retrying
+    expect(flow.failedStep).toBeNull()
+  })
+
   it('does nothing when retry runs in a non-failed state', async () => {
     const { sink } = harness()
     let runs = 0

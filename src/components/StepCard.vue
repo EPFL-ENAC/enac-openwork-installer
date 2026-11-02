@@ -17,13 +17,15 @@ const safeDetail = computed(() => (props.detail ? maskSecrets(props.detail) : ''
 
 const errorText = computed(() => {
   const result = results[props.id]
-  const kind = result?.kind
-  const detail = maskSecrets(result?.detail ?? '')
+  if (!result) return ''
+  const kind = result.kind
+  const detail = maskSecrets(result.detail ?? '')
   if (kind === 'network') return t('run.error.network')
-  if (kind === 'smoke') return t('opencode.error.smoke', { detail })
-  if (kind === 'invalid-json' || kind === 'io') return t('opencode.error.provider', { detail })
   if (kind === 'missing-key') return t('run.error.missingKey')
   if (kind === 'openwork-broken') return t('run.error.openworkBroken')
+  if (!detail.trim()) return ''
+  if (kind === 'smoke') return t('opencode.error.smoke', { detail })
+  if (kind === 'invalid-json' || kind === 'io') return t('opencode.error.provider', { detail })
   return t('run.error.generic', { message: detail })
 })
 </script>
@@ -39,7 +41,7 @@ const errorText = computed(() => {
 
     <p v-if="safeDetail" class="card-detail">{{ safeDetail }}</p>
 
-    <EpflAlert v-if="failedHere" variant="danger">{{ errorText }}</EpflAlert>
+    <EpflAlert v-if="failedHere && errorText" variant="danger">{{ errorText }}</EpflAlert>
 
     <div v-if="failedHere" class="card-actions">
       <EpflButton size="sm" :disabled="state === 'running'" @click="retry">

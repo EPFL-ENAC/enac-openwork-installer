@@ -35,7 +35,9 @@ const repair = async () => {
       <input v-model="consent" type="checkbox" :disabled="busy" />
       <span>{{ t('openwork.stateConsent') }}</span>
     </label>
-    <EpflAlert v-if="error" variant="danger">{{ t('common.error', { message: error.message }) }}</EpflAlert>
+    <EpflAlert v-if="error && error.message.trim()" variant="danger">
+      {{ t('common.error', { message: error.message }) }}
+    </EpflAlert>
     <div class="actions">
       <EpflButton :disabled="!consent || busy" @click="repair">
         {{ busy ? t('openwork.stateRepairing') : t('openwork.stateRepair') }}
