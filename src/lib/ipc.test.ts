@@ -14,7 +14,9 @@ import {
   portalClose,
   portalCreateKey,
   portalGetForm,
+  portalListKeys,
   portalStartLogin,
+  portalUseKey,
   restrictProviderConfig,
   smokeTest,
 } from './ipc'
@@ -35,6 +37,8 @@ describe('ipc wrappers', () => {
     await portalStartLogin()
     await portalGetForm()
     await portalCreateKey('Alice')
+    await portalListKeys()
+    await portalUseKey(1462)
     await portalClose()
     await restrictProviderConfig()
 
@@ -48,6 +52,8 @@ describe('ipc wrappers', () => {
       'portal_start_login',
       'portal_get_form',
       'portal_create_key',
+      'portal_list_keys',
+      'portal_use_key',
       'portal_close',
       'restrict_provider_config',
     ])
@@ -73,5 +79,8 @@ describe('ipc wrappers', () => {
 
     await portalCreateKey('Bob')
     expect(invoke).toHaveBeenLastCalledWith('portal_create_key', { name: 'Bob', unit: null })
+
+    await portalUseKey(834)
+    expect(invoke).toHaveBeenLastCalledWith('portal_use_key', { id: 834 })
   })
 })

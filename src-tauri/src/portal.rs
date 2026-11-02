@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
-use crate::types::{AppError, CreatedKey, PortalForm};
+use crate::types::{AppError, CreatedKey, PortalForm, PortalKeyChoice};
 use crate::util;
 
 pub(crate) const PORTAL_BASE: &str = "https://portal.rcp.epfl.ch";
@@ -430,6 +430,57 @@ pub async fn portal_get_form(state: State<'_, PortalState>) -> Result<PortalForm
 }
 
 #[tauri::command]
+pub async fn portal_list_keys(
+    state: State<'_, PortalState>,
+) -> Result<Vec<PortalKeyChoice>, AppError> {
+    let cookie_header = state.cookie_header().ok_or_else(|| {
+        AppError::new(
+            "portal-auth",
+            "Sign in to the portal before listing the keys.",
+        )
+    })?;
+    let client = portal_client(reqwest::redirect::Policy::default())?;
+    let secrets = state.secrets();
+    Ok(selectable_key_choices(
+        &list_keys(&client, &cookie_header, &secrets).await?,
+    ))
+}
+
+/// Reuses one key the user picked. The chosen id is checked against the same selectable
+/// list the card showed, so an application or legacy key is refused instead of revealed.
+#[tauri::command]
+pub async fn portal_use_key(
+    id: i64,
+    state: State<'_, PortalState>,
+) -> Result<CreatedKey, AppError> {
+    let cookie_header = state.cookie_header().ok_or_else(|| {
+        AppError::new("portal-auth", "Sign in to the portal before reusing a key.")
+    })?;
+    let client = portal_client(reqwest::redirect::Policy::default())?;
+    let secrets = state.secrets();
+    let name = selectable_key_choices(&list_keys(&client, &cookie_header, &secrets).await?)
+        .into_iter()
+        .find(|key| key.id == id)
+        .map(|key| key.name)
+        .ok_or_else(|| {
+            AppError::new(
+                "portal-key-missing",
+                "The portal does not offer that key for reuse.",
+            )
+        })?;
+    let token = reveal_secret(
+        &client,
+        &cookie_header,
+        state.csrftoken().as_deref(),
+        id,
+        &secrets,
+    )
+    .await?;
+    state.set_token(&token);
+    Ok(CreatedKey { name, token })
+}
+
+#[tauri::command]
 pub async fn portal_create_key(
     name: String,
     unit: Option<String>,
@@ -684,6 +735,10 @@ struct FormFetch {
 pub(crate) struct PortalKey {
     pub id: i64,
     pub name: String,
+    /// The portal pool of the key: `BASIC` or `PREMIUM`. The key list API carries it; a
+    /// pool-less answer still parses.
+    #[serde(default)]
+    pub pool: String,
     #[serde(default)]
     pub is_application: bool,
     #[serde(default)]
@@ -706,13 +761,26 @@ pub(crate) fn parse_keys(json: &str) -> Result<Vec<PortalKey>, AppError> {
 /// The personal, enabled key OpenWork can reuse under this name. Application keys need
 /// a head-of-unit validation and legacy keys are deprecated, so neither is reused.
 pub(crate) fn find_reusable_key<'a>(keys: &'a [PortalKey], name: &str) -> Option<&'a PortalKey> {
-    keys.iter().find(|key| {
-        key.name == name
-            && !key.is_application
-            && !key.is_legacy
-            && key.is_enabled
-            && !key.is_pending
-    })
+    keys.iter()
+        .find(|key| key.name == name && is_selectable(key))
+}
+
+/// A key the user may pick for reuse. Application keys need a head-of-unit validation,
+/// legacy keys are deprecated, and a disabled or pending key has no usable secret.
+pub(crate) fn is_selectable(key: &PortalKey) -> bool {
+    !key.is_application && !key.is_legacy && key.is_enabled && !key.is_pending
+}
+
+/// The user's own keys, reduced to what the key card shows: no token, no key material.
+pub(crate) fn selectable_key_choices(keys: &[PortalKey]) -> Vec<PortalKeyChoice> {
+    keys.iter()
+        .filter(|key| is_selectable(key))
+        .map(|key| PortalKeyChoice {
+            id: key.id,
+            name: key.name.clone(),
+            pool: key.pool.clone(),
+        })
+        .collect()
 }
 
 async fn list_keys(
@@ -1178,6 +1246,47 @@ mod tests {
     }
 
     #[test]
+    fn key_list_carries_the_pool_and_tolerates_a_missing_one() {
+        let keys = parse_keys(KEYS_API).expect("key list parses");
+        assert_eq!(keys[0].pool, "BASIC");
+        let sparse = parse_keys(r#"[{"id": 7, "name": "Bare"}]"#).expect("a pool-less key parses");
+        assert_eq!(sparse[0].pool, "");
+    }
+
+    #[test]
+    fn selectable_keys_skip_application_legacy_disabled_and_pending() {
+        let keys = parse_keys(KEYS_API).expect("key list parses");
+        assert_eq!(
+            selectable_key_choices(&keys),
+            vec![PortalKeyChoice {
+                id: 1462,
+                name: "OpenWork".to_string(),
+                pool: "BASIC".to_string(),
+            }]
+        );
+
+        let extra = parse_keys(
+            r#"[
+            {"id": 1, "name": "Legacy", "is_enabled": true, "is_legacy": true},
+            {"id": 2, "name": "Pending", "is_enabled": true, "is_pending": true},
+            {"id": 3, "name": "Premium", "is_enabled": true, "pool": "PREMIUM"}
+        ]"#,
+        )
+        .expect("key list parses");
+        assert_eq!(
+            selectable_key_choices(&extra),
+            vec![PortalKeyChoice {
+                id: 3,
+                name: "Premium".to_string(),
+                pool: "PREMIUM".to_string(),
+            }]
+        );
+
+        let disabled = parse_keys(KEYS_API_DISABLED).expect("key list parses");
+        assert!(selectable_key_choices(&disabled).is_empty());
+    }
+
+    #[test]
     fn key_list_parse_rejects_html() {
         assert_eq!(parse_keys(MODAL).unwrap_err().kind, "parse");
     }
@@ -1275,6 +1384,24 @@ mod tests {
             app.state::<PortalState>(),
         ))
         .unwrap_err();
+        assert_eq!(err.kind, "portal-auth");
+    }
+
+    #[test]
+    fn list_keys_without_session_is_portal_auth() {
+        let app = tauri::test::mock_app();
+        app.manage(PortalState::default());
+        let err = tauri::async_runtime::block_on(portal_list_keys(app.state::<PortalState>()))
+            .unwrap_err();
+        assert_eq!(err.kind, "portal-auth");
+    }
+
+    #[test]
+    fn use_key_without_session_is_portal_auth() {
+        let app = tauri::test::mock_app();
+        app.manage(PortalState::default());
+        let err = tauri::async_runtime::block_on(portal_use_key(1462, app.state::<PortalState>()))
+            .unwrap_err();
         assert_eq!(err.kind, "portal-auth");
     }
 

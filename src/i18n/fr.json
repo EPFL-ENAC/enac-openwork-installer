@@ -41,6 +41,13 @@
       "nameLabel": "Nom de la clé",
       "submit": "Créer la clé"
     },
+    "existingKeys": {
+      "title": "Ou réutiliser une de vos clés existantes"
+    },
+    "pool": {
+      "basic": "basique",
+      "premium": "premium"
+    },
     "choice": {
       "title": "Une clé OpenWork existe déjà",
       "text": "Votre compte possède peut-être déjà une clé OpenWork. Réutilisez la clé existante ou créez une seconde clé avec un nouveau nom.",

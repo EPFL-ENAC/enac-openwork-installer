@@ -29,7 +29,9 @@ const steps = (bridge: RunnerBridge): StepRun[] => [
       pressed += 1
       const answer = await bridge.askKeys({
         units: [],
+        availableKeys: [],
         showUnitPicker: false,
+        showExistingKeys: false,
         unit: null,
         branch: 'existing',
         suggestedKeyName: 'OpenWork-2',

@@ -30,6 +30,16 @@ pub struct PortalForm {
     pub existing_open_work_key: bool,
 }
 
+/// One of the user's own portal keys, as the key card offers it. The token is never part
+/// of the list: a chosen key is revealed on demand.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PortalKeyChoice {
+    pub id: i64,
+    pub name: String,
+    pub pool: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreatedKey {

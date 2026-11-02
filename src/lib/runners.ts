@@ -14,13 +14,16 @@ import {
   portalClose,
   portalCreateKey,
   portalGetForm,
+  portalListKeys,
   portalStartLogin,
+  portalUseKey,
   smokeTest,
   type AppError,
   type BackendLog,
   type InstallResult,
   type InstallStatus,
   type PortalForm,
+  type PortalKeyChoice,
   type PortalLogin,
 } from './ipc'
 import { writeProviderConfig } from './provider-config'
@@ -29,6 +32,8 @@ import { registerSecret } from './trace'
 /** Input the rcpKey card must collect before the runner can continue. */
 export interface KeyPrompt extends KeyChoice {
   units: string[]
+  /** The user's own keys the portal offers for reuse. */
+  availableKeys: PortalKeyChoice[]
   /** The portal window failed, so only a pasted token can help. */
   manual: boolean
 }
@@ -37,6 +42,8 @@ export interface KeyAnswer {
   token?: string
   keyName?: string
   unit?: string | null
+  /** The id of an existing portal key the user chose to reuse. */
+  keyId?: number
 }
 
 export interface RunnerBridge {
@@ -145,7 +152,9 @@ const manualFallback = async (
   emit('Waiting for a pasted RCP token')
   const answer = await bridge.askKeys({
     units: [],
+    availableKeys: [],
     showUnitPicker: false,
+    showExistingKeys: false,
     unit: null,
     branch: 'existing',
     suggestedKeyName: DEFAULT_KEY_NAME,
@@ -188,32 +197,42 @@ const rcpKeyRun = async (
     }
 
     const units = form.units ?? []
+    // A list that does not load must not block the create path.
+    let availableKeys: PortalKeyChoice[] = []
+    try {
+      availableKeys = await portalListKeys()
+    } catch {
+      emit('The portal key list did not load')
+    }
     const ask = async (choice: KeyChoice): Promise<KeyAnswer> =>
-      bridge.askKeys({ ...choice, units, manual: false })
+      bridge.askKeys({ ...choice, units, availableKeys, manual: false })
 
     let choice = chooseKeyBranch({
       units,
       existingOpenWorkKey: form.existingOpenWorkKey,
       refused: false,
+      selectableKeyCount: availableKeys.length,
     })
     emit(`The portal offers ${units.length} unit(s), existing OpenWork key: ${form.existingOpenWorkKey}`)
 
     let answer: KeyAnswer = {}
     let unit = choice.unit
-    if (choice.showUnitPicker) answer = await ask(choice)
+    if (choice.showUnitPicker || choice.showExistingKeys) answer = await ask(choice)
 
     for (;;) {
       if (answer.token?.trim()) return acceptToken(answer.token, answer.keyName ?? choice.suggestedKeyName, emit)
 
       unit = answer.unit ?? unit
       const keyName = answer.keyName?.trim() || choice.suggestedKeyName
+      const chosenId = answer.keyId
       emit(
-        choice.branch === 'existing'
+        chosenId !== undefined || choice.branch === 'existing'
           ? `Reusing the existing RCP key ${keyName}`
           : `Creating the RCP key ${keyName}`,
       )
       try {
-        const created = await portalCreateKey(keyName, unit)
+        const created =
+          chosenId === undefined ? await portalCreateKey(keyName, unit) : await portalUseKey(chosenId)
         registerSecret(created.token)
         emit(`The RCP key ${created.name} is ready`)
         return passed({ keyName: created.name, token: created.token })

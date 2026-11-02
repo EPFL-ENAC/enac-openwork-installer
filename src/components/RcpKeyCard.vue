@@ -4,7 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { EpflButton } from '../kit'
 import type { KeyAnswer, KeyPrompt } from '../lib/runners'
-import { DEFAULT_KEY_NAME } from '../lib/key-choice'
+import type { PortalKeyChoice } from '../lib/ipc'
+import { DEFAULT_KEY_NAME, poolLabel } from '../lib/key-choice'
 import { PORTAL_KEYS_URL } from '../lib/links'
 
 const props = defineProps<{ prompt: KeyPrompt }>()
@@ -37,6 +38,8 @@ const create = () => {
 const useToken = () => {
   if (canPaste.value) emit('submit', { token: pasted.value.trim() })
 }
+
+const useExisting = (key: PortalKeyChoice) => emit('submit', { keyId: key.id, keyName: key.name })
 
 const openKeys = () => openUrl(PORTAL_KEYS_URL).catch(() => {})
 </script>
@@ -111,6 +114,18 @@ const openKeys = () => openUrl(PORTAL_KEYS_URL).catch(() => {})
           {{ prompt.branch === 'fresh' ? t('rcpKey.create.submit') : t('rcpKey.choice.createNew') }}
         </EpflButton>
       </div>
+
+      <div v-if="prompt.showExistingKeys" class="existing-keys">
+        <h4 class="existing-keys-title">{{ t('rcpKey.existingKeys.title') }}</h4>
+        <ul class="existing-keys-list">
+          <li v-for="key in prompt.availableKeys" :key="key.id" class="existing-key">
+            <EpflButton variant="secondary" size="sm" @click="useExisting(key)">
+              {{ key.name }}
+            </EpflButton>
+            <span class="pool-label">{{ t(`rcpKey.pool.${poolLabel(key.pool)}`) }}</span>
+          </li>
+        </ul>
+      </div>
     </template>
   </form>
 </template>
@@ -153,5 +168,41 @@ const openKeys = () => openUrl(PORTAL_KEYS_URL).catch(() => {})
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+.existing-keys {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: var(--border-w) solid var(--border);
+}
+
+.existing-keys-title {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.existing-keys-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.existing-key {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pool-label {
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 </style>

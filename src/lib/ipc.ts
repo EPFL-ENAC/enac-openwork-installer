@@ -23,6 +23,12 @@ export interface PortalForm {
   existingOpenWorkKey: boolean
 }
 
+export interface PortalKeyChoice {
+  id: number
+  name: string
+  pool: string
+}
+
 export interface CreatedKey {
   name: string
   token: string
@@ -77,6 +83,8 @@ export const portalStartLogin = () => invoke<void>('portal_start_login')
 export const portalGetForm = () => invoke<PortalForm>('portal_get_form')
 export const portalCreateKey = (name: string, unit?: string | null) =>
   invoke<CreatedKey>('portal_create_key', { name, unit: unit ?? null })
+export const portalListKeys = () => invoke<PortalKeyChoice[]>('portal_list_keys')
+export const portalUseKey = (id: number) => invoke<CreatedKey>('portal_use_key', { id })
 export const portalClose = () => invoke<void>('portal_close')
 export const restrictProviderConfig = () => invoke<void>('restrict_provider_config')
 export const onPortalLogin = (handler: (result: PortalLogin) => void): Promise<UnlistenFn> =>

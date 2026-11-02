@@ -28,6 +28,8 @@ pub fn run() {
             provider_config::restrict_provider_config,
             portal::portal_start_login,
             portal::portal_get_form,
+            portal::portal_list_keys,
+            portal::portal_use_key,
             portal::portal_create_key,
             portal::portal_close,
         ])

@@ -41,6 +41,13 @@
       "nameLabel": "Key name",
       "submit": "Create the key"
     },
+    "existingKeys": {
+      "title": "Or reuse one of your existing keys"
+    },
+    "pool": {
+      "basic": "basic",
+      "premium": "premium"
+    },
     "choice": {
       "title": "An OpenWork key already exists",
       "text": "Your account may already have an OpenWork key. Reuse the existing key, or create a second key with a new name.",

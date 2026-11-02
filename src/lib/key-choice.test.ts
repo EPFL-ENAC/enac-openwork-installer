@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chooseKeyBranch } from './key-choice'
+import { chooseKeyBranch, poolLabel } from './key-choice'
 
 describe('chooseKeyBranch', () => {
   it('creates a fresh key when no OpenWork key exists', () => {
@@ -112,5 +112,54 @@ describe('chooseKeyBranch', () => {
     chooseKeyBranch({ units, existingOpenWorkKey: false, refused: false, chosenUnit: 'ENAC' })
 
     expect(units).toEqual(['ENAC', 'STI'])
+  })
+
+  it('offers the selectable keys on the fresh branch', () => {
+    const choice = chooseKeyBranch({
+      units: ['ENAC'],
+      existingOpenWorkKey: false,
+      refused: false,
+      selectableKeyCount: 2,
+    })
+
+    expect(choice.branch).toBe('fresh')
+    expect(choice.showExistingKeys).toBe(true)
+  })
+
+  it('hides the key list when no key is selectable', () => {
+    expect(
+      chooseKeyBranch({ units: ['ENAC'], existingOpenWorkKey: false, refused: false, selectableKeyCount: 0 })
+        .showExistingKeys,
+    ).toBe(false)
+    expect(chooseKeyBranch({ units: ['ENAC'], existingOpenWorkKey: false, refused: false }).showExistingKeys).toBe(
+      false,
+    )
+  })
+
+  it('hides the key list on the existing and refused branches', () => {
+    const existing = chooseKeyBranch({
+      units: ['ENAC'],
+      existingOpenWorkKey: true,
+      refused: false,
+      selectableKeyCount: 2,
+    })
+    const refused = chooseKeyBranch({
+      units: ['ENAC'],
+      existingOpenWorkKey: false,
+      refused: true,
+      selectableKeyCount: 2,
+    })
+
+    expect(existing.showExistingKeys).toBe(false)
+    expect(refused.showExistingKeys).toBe(false)
+  })
+})
+
+describe('poolLabel', () => {
+  it('labels the premium pool and defaults to basic', () => {
+    expect(poolLabel('PREMIUM')).toBe('premium')
+    expect(poolLabel('premium')).toBe('premium')
+    expect(poolLabel('BASIC')).toBe('basic')
+    expect(poolLabel('')).toBe('basic')
   })
 })

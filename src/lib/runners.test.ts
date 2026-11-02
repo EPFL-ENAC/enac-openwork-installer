@@ -13,6 +13,8 @@ const ipc = vi.hoisted(() => ({
   portalStartLogin: vi.fn(),
   portalGetForm: vi.fn(),
   portalCreateKey: vi.fn(),
+  portalListKeys: vi.fn(),
+  portalUseKey: vi.fn(),
   portalClose: vi.fn(),
   launchOpenwork: vi.fn(),
 }))
@@ -78,6 +80,7 @@ beforeEach(() => {
   ipc.opencodeStatus.mockResolvedValue({ installed: true, version: '1.2.3', path: '/usr/bin/opencode' })
   ipc.smokeTest.mockResolvedValue({ ok: true, detail: 'pong', error: null })
   ipc.portalClose.mockResolvedValue(undefined)
+  ipc.portalListKeys.mockResolvedValue([])
   provider.writeProviderConfig.mockResolvedValue({
     ok: true,
     configPath: CONFIG_PATH,
@@ -405,5 +408,44 @@ describe('rcpKey runner', () => {
       status: 'failed',
       error: { kind: 'portal-auth', message: expect.any(String) },
     })
+  })
+
+  it('offers the selectable keys next to the create form', async () => {
+    loginOk({ units: ['ENAC'], existingOpenWorkKey: false })
+    ipc.portalListKeys.mockResolvedValue([
+      { id: 1462, name: 'OpenWork', pool: 'BASIC' },
+      { id: 834, name: 'AiReviewer', pool: 'PREMIUM' },
+    ])
+    ipc.portalUseKey.mockResolvedValue({ name: 'AiReviewer', token: TOKEN })
+    const askKeys = asker({ keyId: 834, keyName: 'AiReviewer' })
+
+    const { outcome, lines } = await run(runners({ askKeys }), 'rcpKey')
+
+    const prompt = askKeys.mock.calls[0][0]
+    expect(prompt.branch).toBe('fresh')
+    expect(prompt.showExistingKeys).toBe(true)
+    expect(prompt.availableKeys).toEqual([
+      { id: 1462, name: 'OpenWork', pool: 'BASIC' },
+      { id: 834, name: 'AiReviewer', pool: 'PREMIUM' },
+    ])
+    expect(ipc.portalCreateKey).not.toHaveBeenCalled()
+    expect(ipc.portalUseKey).toHaveBeenCalledWith(834)
+    expect(outcome).toEqual({ status: 'passed', result: { keyName: 'AiReviewer', token: TOKEN } })
+    expect(secrets.registerSecret).toHaveBeenCalledWith(TOKEN)
+    expect(lines.join('\n')).toContain('Reusing the existing RCP key AiReviewer')
+    expect(lines.join('\n')).not.toContain(TOKEN)
+  })
+
+  it('keeps creating a key when the key list does not load', async () => {
+    loginOk({ units: ['ENAC'], existingOpenWorkKey: false })
+    ipc.portalListKeys.mockRejectedValue({ kind: 'network', message: 'offline' })
+    ipc.portalCreateKey.mockResolvedValue({ name: 'OpenWork', token: TOKEN })
+    const askKeys = asker()
+
+    const { outcome } = await run(runners({ askKeys }), 'rcpKey')
+
+    expect(askKeys).not.toHaveBeenCalled()
+    expect(ipc.portalCreateKey).toHaveBeenCalledWith('OpenWork', 'ENAC')
+    expect(outcome.status).toBe('passed')
   })
 })
