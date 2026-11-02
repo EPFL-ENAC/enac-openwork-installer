@@ -77,7 +77,7 @@ There is no self-update. To update, download the new release from GitHub Release
 
 ## Live test checklist
 
-Run this checklist on the EPFL network or VPN, on a Windows x64 machine and on a macOS machine (Apple silicon and Intel). Use a release build from GitHub Releases, or a local build of the same commit. Use a test EPFL account.
+Run this checklist on the EPFL network or VPN, on a Windows x64 machine, on a macOS machine (Apple silicon and Intel) and on an EPFL-network Linux x64 machine. Use a release build from GitHub Releases, or a local build of the same commit. Use a test EPFL account.
 
 ### Fresh RCP key
 
