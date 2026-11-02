@@ -688,6 +688,10 @@ pub fn verify_file_sha512(path: &Path, expected_b64: &str) -> Result<(), AppErro
 
 pub const OPENWORK_PROVIDER_ID: &str = "epfl-aiaas";
 pub const OPENWORK_ENV_KEY: &str = "EPFL_AIAAS_API_KEY";
+// The RCP gateway names its models with the vendor prefix, so the config key is
+// also the model id the engine sends upstream.
+pub const OPENWORK_MODEL_LARGE: &str = "epfl-aiaas/large";
+pub const OPENWORK_MODEL_SMALL: &str = "epfl-aiaas/small";
 const RCP_BASE_URL: &str = "https://inference-rcp.epfl.ch/v1";
 const ENGINE_GLOBAL_ID: &str = "__openwork_engine_global__";
 const MACHINE_OWNERSHIP_ID: &str = "__machine_provider_template_ownership__";
@@ -720,13 +724,13 @@ fn provider_definition() -> serde_json::Value {
             "baseURL": RCP_BASE_URL,
         },
         "models": {
-            "large": {
-                "name": "RCP AIaaS Large",
+            (OPENWORK_MODEL_LARGE): {
+                "name": OPENWORK_MODEL_LARGE,
                 "attachment": true,
                 "modalities": {"input": ["text", "image"], "output": ["text"]},
             },
-            "small": {
-                "name": "RCP AIaaS Small",
+            (OPENWORK_MODEL_SMALL): {
+                "name": OPENWORK_MODEL_SMALL,
                 "attachment": true,
                 "modalities": {"input": ["text", "image"], "output": ["text"]},
                 "variants": {
@@ -754,7 +758,7 @@ fn provider_fingerprint(value: &serde_json::Value) -> String {
 }
 
 fn default_model_value() -> serde_json::Value {
-    serde_json::json!({"providerID": OPENWORK_PROVIDER_ID, "modelID": "large"})
+    serde_json::json!({"providerID": OPENWORK_PROVIDER_ID, "modelID": OPENWORK_MODEL_LARGE})
 }
 
 /// The key rules OpenWork's env store applies: a name token that is not one of
@@ -1430,10 +1434,10 @@ pub async fn configure_openwork(
     });
     match (&outcome.default_model_workspace_id, outcome.default_model_written) {
         (Some(workspace_id), true) => log.log(format!(
-            "the default model is set to {OPENWORK_PROVIDER_ID}/large for the OpenWork workspace {workspace_id}"
+            "the default model is set to {OPENWORK_MODEL_LARGE} for the OpenWork workspace {workspace_id}"
         )),
         (Some(_), false) => log.log(format!(
-            "the default model {OPENWORK_PROVIDER_ID}/large is already set for this OpenWork workspace"
+            "the default model {OPENWORK_MODEL_LARGE} is already set for this OpenWork workspace"
         )),
         (None, _) => log.log(
             "OpenWork has no workspace yet, its default model is set when OpenWork creates one",
@@ -2036,10 +2040,16 @@ mod tests {
         );
         assert_eq!(definition["options"]["apiKey"], "{env:EPFL_AIAAS_API_KEY}");
         let models = definition["models"].as_object().unwrap();
-        assert_eq!(models.keys().collect::<Vec<_>>(), ["large", "small"]);
-        assert_eq!(definition["models"]["large"]["name"], "RCP AIaaS Large");
         assert_eq!(
-            definition["models"]["small"]["modalities"]["input"],
+            models.keys().collect::<Vec<_>>(),
+            [OPENWORK_MODEL_LARGE, OPENWORK_MODEL_SMALL]
+        );
+        assert_eq!(
+            definition["models"][OPENWORK_MODEL_LARGE]["name"],
+            OPENWORK_MODEL_LARGE
+        );
+        assert_eq!(
+            definition["models"][OPENWORK_MODEL_SMALL]["modalities"]["input"],
             serde_json::json!(["text", "image"])
         );
     }
@@ -2050,7 +2060,7 @@ mod tests {
         // with keys sorted by localeCompare, sha256 hex. Computed with node.
         assert_eq!(
             provider_fingerprint(&provider_definition()),
-            "97b8e86e7d19f2b288d68d727a011c2db7e12b9ae82fc39b6b196cf5f8bc77b2"
+            "9a7ac064e81b2c90ba22f303aa98fe69804cb6ecb614919ec0fbcb7ecb8e5269"
         );
     }
 
@@ -2308,7 +2318,7 @@ mod tests {
         let model: serde_json::Value =
             serde_json::from_str(&default_model_json(&db, &expected_id).unwrap()).unwrap();
         assert_eq!(model["providerID"], "epfl-aiaas");
-        assert_eq!(model["modelID"], "large");
+        assert_eq!(model["modelID"], OPENWORK_MODEL_LARGE);
 
         let workspace_config: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(folder.join("opencode.jsonc")).unwrap())
