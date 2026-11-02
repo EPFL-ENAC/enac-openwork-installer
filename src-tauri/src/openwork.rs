@@ -690,8 +690,19 @@ pub fn verify_file_sha512(path: &Path, expected_b64: &str) -> Result<(), AppErro
 // workspace list in <Electron user data>/openwork-workspaces.json and adopts
 // ~/OpenWork Chat at the first launch, so a fresh folder already has the id
 // the desktop will compute.
+//
+// The desktop's model picker reads no store: the default it shows comes from
+// its renderer localStorage (openwork.workspaceDefaultModel.v1...), so the
+// workspace_default_models row only feeds automations, remote sessions and
+// headless callers, which look the model up as models[modelID] of its provider.
+// What the picker preselects on a fresh profile is the "Auto" model of the
+// built-in "OpenWork Models" provider, so the runtime config turns that
+// provider off with disabled_providers, the desktop's own Auto switch.
 
 pub const OPENWORK_PROVIDER_ID: &str = "epfl-aiaas";
+/// The built-in "OpenWork Models" provider the desktop ships with and turns on
+/// for its free "Auto" model.
+pub const OPENWORK_FREE_PROVIDER_ID: &str = "openwork-free";
 pub const OPENWORK_ENV_KEY: &str = "EPFL_AIAAS_API_KEY";
 // The RCP gateway names its models with the vendor prefix, so the config key is
 // also the model id the engine sends upstream.
@@ -855,8 +866,9 @@ fn sort_env_variables(list: &mut [serde_json::Value]) {
     });
 }
 
-/// Adds the RCP provider to the engine-global runtime config, keeping every
-/// other provider and setting (for example disabled_providers) in place.
+/// Adds the RCP provider to the engine-global runtime config and turns its
+/// built-in "OpenWork Models" provider off, keeping every other provider and
+/// setting in place.
 fn merge_runtime_provider(
     existing: serde_json::Value,
 ) -> Result<(serde_json::Value, bool), AppError> {
@@ -867,17 +879,35 @@ fn merge_runtime_provider(
             "the OpenWork runtime config row is not a JSON object",
         ));
     };
-    let providers = object.entry("provider").or_insert(serde_json::json!({}));
-    let Some(providers) = providers.as_object_mut() else {
-        return Err(AppError::parse(
-            "the OpenWork runtime config holds no provider map",
-        ));
+    let provider_changed = {
+        let providers = object.entry("provider").or_insert(serde_json::json!({}));
+        let Some(providers) = providers.as_object_mut() else {
+            return Err(AppError::parse(
+                "the OpenWork runtime config holds no provider map",
+            ));
+        };
+        if providers.get(OPENWORK_PROVIDER_ID) == Some(&definition) {
+            false
+        } else {
+            providers.insert(OPENWORK_PROVIDER_ID.to_string(), definition);
+            true
+        }
     };
-    if providers.get(OPENWORK_PROVIDER_ID) == Some(&definition) {
-        return Ok((next, false));
+    let entry = object
+        .entry("disabled_providers")
+        .or_insert_with(|| serde_json::json!([]));
+    let mut disabled = match entry.as_array() {
+        Some(list) => list.clone(),
+        None => Vec::new(),
+    };
+    let disabled_changed = !disabled
+        .iter()
+        .any(|id| id.as_str() == Some(OPENWORK_FREE_PROVIDER_ID));
+    if disabled_changed {
+        disabled.push(serde_json::json!(OPENWORK_FREE_PROVIDER_ID));
+        *entry = serde_json::Value::Array(disabled);
     }
-    providers.insert(OPENWORK_PROVIDER_ID.to_string(), definition);
-    Ok((next, true))
+    Ok((next, provider_changed || disabled_changed))
 }
 
 /// Approves the template resolution of our provider for this exact definition.
@@ -1485,6 +1515,9 @@ pub async fn configure_openwork(
     } else {
         format!("the {OPENWORK_PROVIDER_ID} provider is already configured in OpenWork")
     });
+    log.log(format!(
+        "the built-in {OPENWORK_FREE_PROVIDER_ID} provider is turned off, so its Auto model cannot be the default"
+    ));
     log.log(if outcome.env_written {
         format!("the RCP key is stored in the OpenWork environment store as {OPENWORK_ENV_KEY}")
     } else {
@@ -2109,6 +2142,16 @@ mod tests {
         )
     }
 
+    /// OpenWork looks a stored default model up as `models[modelID]` inside the
+    /// provider map, so a row selects a model only when that key is there.
+    fn resolves_in(providers: &serde_json::Value, model: &serde_json::Value) -> bool {
+        let provider_id = model["providerID"].as_str().unwrap_or_default();
+        let model_id = model["modelID"].as_str().unwrap_or_default();
+        providers[provider_id]["models"]
+            .as_object()
+            .is_some_and(|models| models.contains_key(model_id))
+    }
+
     fn seeded_db(db: &Path) {
         let conn = rusqlite::Connection::open(db).unwrap();
         conn.execute_batch(
@@ -2291,7 +2334,7 @@ mod tests {
         assert!(changed);
         assert_eq!(
             merged["disabled_providers"],
-            serde_json::json!(["opencode"])
+            serde_json::json!(["opencode", OPENWORK_FREE_PROVIDER_ID])
         );
         assert_eq!(
             merged["provider"]["openwork-free"]["name"],
@@ -2305,6 +2348,47 @@ mod tests {
         let (again, changed) = merge_runtime_provider(merged).unwrap();
         assert!(!changed);
         assert!(again["provider"]["openwork-free"].is_object());
+    }
+
+    #[test]
+    fn masks_the_built_in_provider_on_a_runtime_config_without_one() {
+        let (merged, changed) = merge_runtime_provider(serde_json::json!({})).unwrap();
+        assert!(changed);
+        assert_eq!(
+            merged["disabled_providers"],
+            serde_json::json!([OPENWORK_FREE_PROVIDER_ID])
+        );
+        assert_eq!(
+            merged["provider"]["epfl-aiaas"]["name"],
+            "RCP AI Inference as a Service"
+        );
+    }
+
+    #[test]
+    fn rewrites_the_mask_when_a_user_turns_auto_back_on() {
+        let (merged, _) = merge_runtime_provider(serde_json::json!({})).unwrap();
+        let mut reenabled = merged.clone();
+        reenabled["disabled_providers"] = serde_json::json!(["opencode"]);
+
+        let (healed, changed) = merge_runtime_provider(reenabled).unwrap();
+        assert!(changed);
+        assert_eq!(
+            healed["disabled_providers"],
+            serde_json::json!(["opencode", OPENWORK_FREE_PROVIDER_ID])
+        );
+    }
+
+    #[test]
+    fn replaces_an_unexpected_disabled_provider_list() {
+        let (merged, changed) = merge_runtime_provider(serde_json::json!({
+            "disabled_providers": "opencode"
+        }))
+        .unwrap();
+        assert!(changed);
+        assert_eq!(
+            merged["disabled_providers"],
+            serde_json::json!([OPENWORK_FREE_PROVIDER_ID])
+        );
     }
 
     #[test]
@@ -2434,6 +2518,13 @@ mod tests {
             serde_json::from_str(&default_model_json(&db, &expected_id).unwrap()).unwrap();
         assert_eq!(model["providerID"], "epfl-aiaas");
         assert_eq!(model["modelID"], OPENWORK_MODEL_LARGE);
+        assert!(resolves_in(&runtime["provider"], &model));
+        // The desktop's own Auto off switch is this entry, and Auto is the
+        // model a fresh profile preselects otherwise.
+        assert_eq!(
+            runtime["disabled_providers"],
+            serde_json::json!([OPENWORK_FREE_PROVIDER_ID])
+        );
 
         // The engine injects the configured provider globally, and a workspace
         // file that repeats it breaks the auth, so a fresh home gets no file.
@@ -2559,7 +2650,7 @@ mod tests {
         );
         assert_eq!(
             runtime["disabled_providers"],
-            serde_json::json!(["opencode"])
+            serde_json::json!(["opencode", OPENWORK_FREE_PROVIDER_ID])
         );
         assert!(runtime["provider"]["epfl-aiaas"].is_object());
         let other = default_model_json(&db, "ws_other").unwrap();
@@ -2798,6 +2889,20 @@ mod tests {
         )
         .unwrap();
         assert!(runtime.contains(OPENWORK_PROVIDER_ID));
+        let runtime: serde_json::Value = serde_json::from_str(&runtime).unwrap();
+        let db = config_dir.join("runtime.sqlite");
+        let workspace_id = workspace_id_for_path(&workspace_path_string(&folder));
+        let model: serde_json::Value =
+            serde_json::from_str(&default_model_json(&db, &workspace_id).unwrap()).unwrap();
+        assert!(resolves_in(&runtime["provider"], &model));
+        assert_eq!(model["modelID"], OPENWORK_MODEL_LARGE);
+        let disabled: Vec<&str> = runtime["disabled_providers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|id| id.as_str())
+            .collect();
+        assert!(disabled.contains(&OPENWORK_FREE_PROVIDER_ID));
 
         let again =
             configure_openwork_in(&config_dir, &user_data, &home, "rcp-verify-token", now_ms())
