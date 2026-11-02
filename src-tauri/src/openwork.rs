@@ -725,12 +725,12 @@ fn provider_definition() -> serde_json::Value {
         },
         "models": {
             (OPENWORK_MODEL_LARGE): {
-                "name": OPENWORK_MODEL_LARGE,
+                "name": "RCP AIaaS Large",
                 "attachment": true,
                 "modalities": {"input": ["text", "image"], "output": ["text"]},
             },
             (OPENWORK_MODEL_SMALL): {
-                "name": OPENWORK_MODEL_SMALL,
+                "name": "RCP AIaaS Small",
                 "attachment": true,
                 "modalities": {"input": ["text", "image"], "output": ["text"]},
                 "variants": {
@@ -2046,7 +2046,11 @@ mod tests {
         );
         assert_eq!(
             definition["models"][OPENWORK_MODEL_LARGE]["name"],
-            OPENWORK_MODEL_LARGE
+            "RCP AIaaS Large"
+        );
+        assert_eq!(
+            definition["models"][OPENWORK_MODEL_SMALL]["name"],
+            "RCP AIaaS Small"
         );
         assert_eq!(
             definition["models"][OPENWORK_MODEL_SMALL]["modalities"]["input"],
@@ -2060,7 +2064,7 @@ mod tests {
         // with keys sorted by localeCompare, sha256 hex. Computed with node.
         assert_eq!(
             provider_fingerprint(&provider_definition()),
-            "9a7ac064e81b2c90ba22f303aa98fe69804cb6ecb614919ec0fbcb7ecb8e5269"
+            "a41eac2a78f1a132c6a3d3c61fa8fa9f7c33b708512a288324df4b5bda224029"
         );
     }
 
@@ -2310,6 +2314,21 @@ mod tests {
             runtime["provider"]["epfl-aiaas"]["options"]["apiKey"],
             "{env:EPFL_AIAAS_API_KEY}"
         );
+        let runtime_models = runtime["provider"]["epfl-aiaas"]["models"]
+            .as_object()
+            .unwrap();
+        assert_eq!(
+            runtime_models.keys().collect::<Vec<_>>(),
+            [OPENWORK_MODEL_LARGE, OPENWORK_MODEL_SMALL]
+        );
+        assert_eq!(
+            runtime_models[OPENWORK_MODEL_LARGE]["name"],
+            "RCP AIaaS Large"
+        );
+        assert_eq!(
+            runtime_models[OPENWORK_MODEL_SMALL]["name"],
+            "RCP AIaaS Small"
+        );
         let ownership: serde_json::Value = serde_json::from_str(
             &workspace_config_json(&db, "__machine_provider_template_ownership__").unwrap(),
         )
@@ -2330,6 +2349,10 @@ mod tests {
         assert_eq!(
             workspace_config["provider"]["epfl-aiaas"]["options"]["apiKey"],
             "{env:EPFL_AIAAS_API_KEY}"
+        );
+        assert_eq!(
+            workspace_config["provider"]["epfl-aiaas"]["models"][OPENWORK_MODEL_SMALL]["name"],
+            "RCP AIaaS Small"
         );
 
         let again = configure_openwork_in(
