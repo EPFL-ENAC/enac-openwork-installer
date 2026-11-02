@@ -85,11 +85,11 @@ Run this checklist on the EPFL network or VPN, on a Windows x64 machine, on a ma
 - [ ] Network check passes. Disconnect the VPN and confirm the app shows the VPN link and a working retry.
 - [ ] RCP key step opens the portal window. Complete the Entra ID login and the MFA prompt.
 - [ ] Create a key named `OpenWork`. Confirm the token is masked by default, the reveal button works, and the clipboard warning appears after copy.
-- [ ] OpenCode step shows one card. The trace names the install result, then the config write to `~/.config/opencode/opencode.json` and its `.bak` path, then the smoke result.
+- [ ] OpenCode step shows one card. The side log names the install result, then the config write to `~/.config/opencode/opencode.json` and its `.bak` path, then the smoke result. The step cards show the step states, the log stays a small scrollable panel.
 - [ ] OpenCode step detects an existing install and skips it. On a clean machine it installs OpenCode without an admin prompt.
 - [ ] Smoke test passes. A failure stops the step on the OpenCode card, and the trace names the smoke sub-action.
 - [ ] OpenWork step detects an existing install and skips it. On a clean machine it installs OpenWork without an admin prompt.
-- [ ] Summary shows both versions, the config paths, the key name and the smoke result.
+- [ ] Summary shows the network check, the key name, both versions and the config paths, on its own page with no log panel and no smoke result.
 - [ ] Launch button opens the installed OpenWork app.
 
 ### Existing OpenWork key

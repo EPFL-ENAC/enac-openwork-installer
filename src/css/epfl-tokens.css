@@ -124,17 +124,17 @@
      Matches docs/design/typography.html
      ────────────────────────────────────────────────────────── */
 
-  --fs-h1:   3rem;       /* 48px */
-  --fs-h2:   2.375rem;   /* 38px */
-  --fs-h3:   1.75rem;    /* 28px (bold) */
-  --fs-h4:   1.5rem;     /* 24px */
-  --fs-h5:   1.25rem;    /* 20px (bold) */
-  --fs-h6:   1.125rem;   /* 18px, uppercase */
+  --fs-h1:   2.125rem;   /* 34px */
+  --fs-h2:   1.6875rem;  /* 27px */
+  --fs-h3:   1.25rem;    /* 20px (bold) */
+  --fs-h4:   1.0625rem;  /* 17px */
+  --fs-h5:   0.875rem;   /* 14px (bold) */
+  --fs-h6:   0.8125rem;  /* 13px, uppercase */
 
-  --fs-lead: 1.125rem;
-  --fs-body: 1rem;       /* clamp body, see body rule */
-  --fs-sm:   0.875rem;
-  --fs-xs:   0.778rem;
+  --fs-lead: 0.8125rem;
+  --fs-body: 0.6875rem;  /* clamp body, see body rule */
+  --fs-sm:   0.625rem;
+  --fs-xs:   0.5625rem;
 
   --lh-tight:  1.1;  /* @kind font */
   --lh-snug:   1.2;  /* @kind font */
@@ -183,7 +183,7 @@ html { font-size: 16px; }
 
 body {
   font-family: var(--font-sans);
-  font-size: clamp(1rem, calc(0.9375rem + 0.25vw), 1.125rem);
+  font-size: clamp(0.6875rem, calc(0.65625rem + 0.25vw), 0.8125rem);
   line-height: var(--lh-relaxed);
   color: var(--fg);
   background: var(--bg);
@@ -207,7 +207,7 @@ h6, .h6 {
 }
 
 .lead {
-  font-size: clamp(1rem, calc(0.8125rem + 0.75vw), 1.375rem);
+  font-size: clamp(0.6875rem, calc(0.5625rem + 0.525vw), 0.9375rem);
   line-height: var(--lh-relaxed);
 }
 
@@ -227,7 +227,7 @@ mark {
 }
 
 blockquote, .blockquote {
-  font-size: 1.5rem;
+  font-size: 1.0625rem;
   line-height: 1.3;
   font-style: italic;
   padding-left: 1.66rem;
@@ -253,19 +253,19 @@ code { color: var(--epfl-red); }
 
 /* Responsive type — match Bootstrap breakpoints */
 @media (max-width: 991.98px) {
-  h1, .h1 { font-size: 2.875rem; }
-  h2, .h2 { font-size: 2.25rem; }
-  h3, .h3 { font-size: 1.625rem; }
-  h4, .h4 { font-size: 1.375rem; }
+  h1, .h1 { font-size: 2rem; }
+  h2, .h2 { font-size: 1.5625rem; }
+  h3, .h3 { font-size: 1.125rem; }
+  h4, .h4 { font-size: 0.9375rem; }
 }
 @media (max-width: 767.98px) {
-  h1, .h1 { font-size: 2.5rem; }
+  h1, .h1 { font-size: 1.75rem; }
 }
 @media (max-width: 575.98px) {
-  h1, .h1 { font-size: 2rem; }
-  h2, .h2 { font-size: 1.625rem; }
-  h3, .h3 { font-size: 1.375rem; }
-  h4, .h4 { font-size: 1.25rem; }
-  h5, .h5 { font-size: 1rem; }
-  h6, .h6 { font-size: .9375rem; }
+  h1, .h1 { font-size: 1.375rem; }
+  h2, .h2 { font-size: 1.125rem; }
+  h3, .h3 { font-size: 0.9375rem; }
+  h4, .h4 { font-size: 0.875rem; }
+  h5, .h5 { font-size: 0.6875rem; }
+  h6, .h6 { font-size: 0.625rem; }
 }

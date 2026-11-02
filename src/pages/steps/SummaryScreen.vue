@@ -35,6 +35,8 @@ const configPaths = computed(() =>
   ].filter((entry) => entry.path),
 )
 
+const networkText = computed(() => t(`trace.status.${results.network?.status ?? 'pending'}`))
+
 const launch = async () => {
   launchError.value = null
   try {
@@ -43,20 +45,21 @@ const launch = async () => {
     launchError.value = cause as AppError
   }
 }
-
-const smokeText = computed(() => {
-  const result = results.opencode
-  if (!result) return t('summary.smokeNotRun')
-  return result.ok ? t('summary.smokePass') : t('summary.smokeFail')
-})
 </script>
 
 <template>
   <section>
     <h2 class="summary-title">{{ t('summary.title') }}</h2>
-    <p>{{ t('summary.intro') }}</p>
 
     <dl class="summary-list">
+      <div class="summary-row">
+        <dt>{{ t('stepTitles.network') }}</dt>
+        <dd>{{ networkText }}</dd>
+      </div>
+      <div class="summary-row">
+        <dt>{{ t('summary.keyName') }}</dt>
+        <dd>{{ results.rcpKey?.keyName ?? t('summary.noKey') }}</dd>
+      </div>
       <div class="summary-row">
         <dt>{{ t('summary.opencode') }}</dt>
         <dd>{{ toolText('opencode') }}</dd>
@@ -64,14 +67,6 @@ const smokeText = computed(() => {
       <div class="summary-row">
         <dt>{{ t('summary.openwork') }}</dt>
         <dd>{{ toolText('openwork') }}</dd>
-      </div>
-      <div class="summary-row">
-        <dt>{{ t('summary.keyName') }}</dt>
-        <dd>{{ results.rcpKey?.keyName ?? t('summary.noKey') }}</dd>
-      </div>
-      <div class="summary-row">
-        <dt>{{ t('summary.smokeTest') }}</dt>
-        <dd>{{ smokeText }}</dd>
       </div>
     </dl>
 

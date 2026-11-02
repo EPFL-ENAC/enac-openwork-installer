@@ -18,7 +18,7 @@ const begin = () => {
   <section>
     <h1>{{ t('welcome.title') }}</h1>
     <p class="lead">{{ t('welcome.intro') }}</p>
-    <p class="lead">{{ t('welcome.pauses') }}</p>
+    <p class="lead">{{ t('welcome.credentials') }}</p>
     <div class="actions">
       <EpflButton :disabled="state === 'running'" @click="begin">{{ t('welcome.start') }}</EpflButton>
     </div>

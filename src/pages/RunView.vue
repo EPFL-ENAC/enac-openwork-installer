@@ -34,11 +34,12 @@ const detailOf = (id: StepId): string | undefined => {
 </script>
 
 <template>
-  <div class="run">
+  <SummaryScreen v-if="state === 'done'" @open-url="emit('open-url', $event)" />
+
+  <div v-else class="run">
     <div class="run-cards">
       <header class="run-head">
         <h1 class="run-title">{{ t('run.title') }}</h1>
-        <p class="run-intro">{{ t('run.intro') }}</p>
       </header>
 
       <StepCard id="network" :detail="detailOf('network')">
@@ -63,10 +64,6 @@ const detailOf = (id: StepId): string | undefined => {
           <OpenworkRepair v-if="results.openwork?.kind === 'openwork-broken'" @repaired="retry" />
         </template>
       </StepCard>
-
-      <section v-if="state === 'done'" class="run-summary">
-        <SummaryScreen @open-url="emit('open-url', $event)" />
-      </section>
     </div>
 
     <aside class="run-trace">
@@ -78,7 +75,7 @@ const detailOf = (id: StepId): string | undefined => {
 <style scoped>
 .run {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 22rem;
+  grid-template-columns: minmax(0, 1fr) 18rem;
   gap: var(--space-4);
   align-items: start;
 }
@@ -107,12 +104,6 @@ const detailOf = (id: StepId): string | undefined => {
 .run-trace {
   position: sticky;
   top: var(--space-4);
-}
-
-.run-summary {
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: var(--border-w) solid var(--border);
 }
 
 .hint {

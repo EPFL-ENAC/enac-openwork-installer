@@ -10,12 +10,11 @@
   "welcome": {
     "title": "Bienvenue",
     "intro": "Cet outil installe OpenCode et OpenWork sur votre ordinateur.",
-    "pauses": "Commencer lance toute l'installation. Elle s'arrête seulement pour la connexion au portail EPFL et pour le choix de la clé RCP.",
+    "credentials": "Il vous sera demandé de saisir vos identifiants EPFL pour créer ou récupérer votre clé d'API d'inférence LLM.",
     "start": "Commencer"
   },
   "run": {
     "title": "Installation",
-    "intro": "Les étapes s'exécutent l'une après l'autre. La trace reste visible et montre ce qui se passe.",
     "version": "Version {version}",
     "keyName": "Clé RCP {name}",
     "error": {
@@ -83,7 +82,6 @@
   },
   "summary": {
     "title": "Résumé",
-    "intro": "Voici ce que cette installation a fait.",
     "opencode": "OpenCode",
     "openwork": "OpenWork",
     "notInstalled": "Non installé",
@@ -92,10 +90,6 @@
     "configPaths": "Chemins des fichiers de configuration",
     "keyName": "Nom de la clé RCP",
     "noKey": "Aucune clé créée",
-    "smokeTest": "Test de fonctionnement",
-    "smokePass": "Réussi",
-    "smokeFail": "Échoué",
-    "smokeNotRun": "Non exécuté",
     "launch": "Lancer OpenWork",
     "docsLink": "Ouvrir la documentation OpenWork"
   },
@@ -104,7 +98,6 @@
     "retry": "Réessayer"
   },
   "trace": {
-    "title": "Trace",
     "log": "Journal d'activité",
     "empty": "Aucune activité pour le moment.",
     "status": {

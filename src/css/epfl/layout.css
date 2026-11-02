@@ -7,7 +7,7 @@
 .epfl-section h2 { font-size: var(--fs-h2); font-weight: var(--w-normal); margin: 0 0 var(--gutter); }
 
 .epfl-eyebrow {
-  font-size: 0.75rem;
+  font-size: 0.5rem;
   text-transform: uppercase;
   letter-spacing: .08em;
   color: var(--primary);
@@ -17,7 +17,7 @@
 
 .epfl-breadcrumb {
   padding: 1rem 3rem;
-  font-size: 0.8125rem;
+  font-size: 0.5625rem;
   color: var(--fg-muted);
   border-bottom: var(--border-w) solid var(--border-subtle);
 }
