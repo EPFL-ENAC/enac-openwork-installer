@@ -1,0 +1,153 @@
+
+<div id="portal-modal-key-new" class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+        <div class="modal-header bg-primary">
+
+            <h5 class="modal-title text-light">New Key</h5>
+        </div>
+        <div class="modal-body">
+            <form id="portal-form-key-new">
+    <input type="hidden" name="csrfmiddlewaretoken" value="***">
+
+    <div class="row">
+        <div class="col-6">
+            <label for="id_name" class="col-form-label">Name</label>
+            <p><small id="id_name_help" class="text-muted">
+                Key name
+            </small></p>
+        </div>
+        <div class="col-6">
+            <input class="form-control" type="text" name="name" maxlength="15" id="id_name" value="">
+            <small id="name_error" class="text-danger">
+                
+            </small>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-6">
+            <label for="id_unit" class="col-form-label">Unit</label>
+            <p><small id="id_unit_help" class="text-muted">
+                EPFL Unit
+            </small></p>
+        </div>
+        <div class="col-6">
+            <select class="form-select" name="unit" id="id_unit">
+                
+                    <option value="10208"  >ENAC-IT</option>
+                
+                    <option value="10232"  >LSMS</option>
+                
+            </select>
+            <small id="unit_error" class="text-danger">
+                
+            </small>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-6">
+            <label for="id_pool" class="col-form-label">Pool</label>
+            <p><small id="id_pool_help" class="text-muted">
+                Models available
+            </small></p>
+        </div>
+        <div class="col-6">
+            <select class="form-select" name="pool" id="id_pool" data-pools="[{&quot;value&quot;: &quot;BASIC&quot;, &quot;text&quot;: &quot;Basic&quot;, &quot;is_student_pool&quot;: false}, {&quot;value&quot;: &quot;PREMIUM&quot;, &quot;text&quot;: &quot;Premium&quot;, &quot;is_student_pool&quot;: false}]">
+                
+                    <option value="BASIC" >Basic</option>
+                
+                    <option value="PREMIUM" >Premium</option>
+                
+            </select>
+            <small id="pool_error" class="text-danger">
+                
+            </small>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-6">
+            <label for="id_usage" class="col-form-label">Usage</label>
+            <p><small id="id_usage_help" class="text-muted">
+                Key usage
+            </small></p>
+        </div>
+        <div class="col-6">
+            <select class="form-select" name="usage" id="id_usage">
+                
+                    <option value="PERSONAL"  >Personal</option>
+                
+                    <option value="APPLICATION"  >Application</option>
+                
+            </select>
+            <small id="usage_error" class="text-danger">
+                
+            </small>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-6">
+            <label for="id_budget" class="col-form-label">Budget max</label>
+            <p><small id="id_budget_help" class="text-muted">
+                Budget max in CHF. Leave blank for no limit.
+            </small></p>
+        </div>
+        <div class="col-6">
+            <input class="form-control" type="text" name="budget" id="id_budget" >
+            <small id="budget_error" class="text-danger">
+                
+            </small>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-6">
+            <label for="id_lifetime" class="col-form-label">Lifetime</label>
+            <p><small id="id_lifetime_help" class="text-muted">
+                Maximum is 365 days
+            </small></p>
+        </div>
+        <div class="col-6">
+            <small id="lifetime_error" class="text-danger">
+                
+            </small>
+            <div class="input-group mb-3">
+                <input class="form-control safari-empty-date" type="date" name="lifetime" id="id_lifetime" data-student-lifetime="2026-12-31" min="2026-11-03" max="2027-11-02" value="">
+                <button id="id_lifetime_max" type="button" class="btn btn-outline-primary rcp-max-button">Max</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-6">
+            <label for="id_comment" class="col-form-label">Comment</label>
+            <p><small id="id_comment_help" class="text-muted">
+                Addionnal information
+            </small></p>
+        </div>
+        <div class="col-6">
+            <textarea class="form-control" name="comment" cols="30" rows="4" id="id_comment" maxlength="256"></textarea>
+            <small id="comment_error" class="text-danger">
+                
+            </small>
+        </div>
+    </div>
+
+    
+
+</form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary"
+                    hx-post="/aiaas/modal_key_new"
+                    hx-target="#portal-modal-key-new"
+                    hx-include="#portal-form-key-new"
+                    hx-vals="js:{usage: document.querySelector('#id_usage').value}"
+                    hx-trigger="click"
+            >Request</button>
+        </div>
+    </div>
+</div>

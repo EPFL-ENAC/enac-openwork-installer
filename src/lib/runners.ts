@@ -196,14 +196,18 @@ const rcpKeyRun = async (
 
     let answer: KeyAnswer = {}
     let unit = choice.unit
-    if (choice.showUnitPicker || choice.branch !== 'fresh') answer = await ask(choice)
+    if (choice.showUnitPicker) answer = await ask(choice)
 
     for (;;) {
       if (answer.token?.trim()) return acceptToken(answer.token, answer.keyName ?? choice.suggestedKeyName, emit)
 
       unit = answer.unit ?? unit
       const keyName = answer.keyName?.trim() || choice.suggestedKeyName
-      emit(`Creating the RCP key ${keyName}`)
+      emit(
+        choice.branch === 'existing'
+          ? `Reusing the existing RCP key ${keyName}`
+          : `Creating the RCP key ${keyName}`,
+      )
       try {
         const created = await portalCreateKey(keyName, unit)
         registerSecret(created.token)

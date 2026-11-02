@@ -268,26 +268,25 @@ describe('rcpKey runner', () => {
     expect(outcome.status).toBe('passed')
   })
 
-  it('pauses on key choice and uses a pasted existing token', async () => {
+  it('reuses an existing key without prompting', async () => {
     loginOk({ units: ['ENAC'], existingOpenWorkKey: true })
-    const askKeys = asker({ token: TOKEN })
+    ipc.portalCreateKey.mockResolvedValue({ name: 'OpenWork', token: TOKEN })
+    const askKeys = asker()
 
     const { outcome, lines } = await run(runners({ askKeys }), 'rcpKey')
 
-    const prompt = askKeys.mock.calls[0][0]
-    expect(prompt.branch).toBe('existing')
-    expect(prompt.suggestedKeyName).toBe('OpenWork-2')
-    expect(ipc.portalCreateKey).not.toHaveBeenCalled()
+    expect(askKeys).not.toHaveBeenCalled()
+    expect(ipc.portalCreateKey).toHaveBeenCalledWith('OpenWork', 'ENAC')
     expect(outcome).toEqual({
       status: 'passed',
-      result: { keyName: 'OpenWork-2', token: TOKEN },
+      result: { keyName: 'OpenWork', token: TOKEN },
     })
     expect(secrets.registerSecret).toHaveBeenCalledWith(TOKEN)
     expect(lines.join('\n')).not.toContain(TOKEN)
   })
 
   it('waits for the answer before it continues', async () => {
-    loginOk({ units: ['ENAC'], existingOpenWorkKey: true })
+    loginOk({ units: ['ENAC', 'STI'], existingOpenWorkKey: false })
     let answer: (value: KeyAnswer) => void = () => {}
     const askKeys = vi.fn<(prompt: KeyPrompt) => Promise<KeyAnswer>>(
       () =>

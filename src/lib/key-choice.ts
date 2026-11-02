@@ -18,7 +18,8 @@ export interface KeyChoice {
 }
 
 export const chooseKeyBranch = (input: KeyChoiceInput): KeyChoice => {
-  const showUnitPicker = input.units.length > 1
+  // An existing key keeps its unit, so only a new key needs the unit choice.
+  const showUnitPicker = input.units.length > 1 && !input.existingOpenWorkKey
   const chosen = input.chosenUnit
   const unit = showUnitPicker
     ? chosen && input.units.includes(chosen)
@@ -35,6 +36,8 @@ export const chooseKeyBranch = (input: KeyChoiceInput): KeyChoice => {
     branch,
     unit,
     showUnitPicker,
-    suggestedKeyName: branch === 'fresh' ? DEFAULT_KEY_NAME : SECOND_KEY_NAME,
+    // An existing OpenWork key is reused: its stored secret is revealed, so the default
+    // name stays. Only a refused name asks for a second key.
+    suggestedKeyName: branch === 'refused' ? SECOND_KEY_NAME : DEFAULT_KEY_NAME,
   }
 }

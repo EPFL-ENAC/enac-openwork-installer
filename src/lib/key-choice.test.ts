@@ -64,7 +64,7 @@ describe('chooseKeyBranch', () => {
     expect(choice.showUnitPicker).toBe(false)
   })
 
-  it('offers the existing-key choice when the portal reports a key', () => {
+  it('reuses the reported existing key under its own name', () => {
     const choice = chooseKeyBranch({
       units: ['ENAC'],
       existingOpenWorkKey: true,
@@ -72,7 +72,18 @@ describe('chooseKeyBranch', () => {
     })
 
     expect(choice.branch).toBe('existing')
-    expect(choice.suggestedKeyName).toBe('OpenWork-2')
+    expect(choice.suggestedKeyName).toBe('OpenWork')
+  })
+
+  it('asks no unit for an existing key even when several units exist', () => {
+    const choice = chooseKeyBranch({
+      units: ['ENAC', 'STI'],
+      existingOpenWorkKey: true,
+      refused: false,
+    })
+
+    expect(choice.showUnitPicker).toBe(false)
+    expect(choice.unit).toBe('ENAC')
   })
 
   it('offers the existing-key choice when the portal refuses a duplicate name', () => {

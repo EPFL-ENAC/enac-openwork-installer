@@ -1,0 +1,27 @@
+[
+  {
+    "id": 1462,
+    "name": "OpenWork",
+    "key_id": "***",
+    "key_uuid": "***",
+    "pool": "BASIC",
+    "unit": 10208,
+    "date_created": "2026-10-24T09:12:41.902113+00:00",
+    "date_validated": null,
+    "lifetime": null,
+    "max_parallel_override": null,
+    "budget": 0,
+    "comment": "",
+    "is_application": false,
+    "is_enabled": false,
+    "is_pending": false,
+    "is_updating": false,
+    "is_legacy": false,
+    "litellm_info": {
+      "key_name": "sk-...AX3Q",
+      "key_alias": "***",
+      "spend": 0.0,
+      "expires": null
+    }
+  }
+]

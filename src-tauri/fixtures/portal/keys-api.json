@@ -1,0 +1,52 @@
+[
+  {
+    "id": 1462,
+    "name": "OpenWork",
+    "key_id": "***",
+    "key_uuid": "***",
+    "pool": "BASIC",
+    "unit": 10208,
+    "date_created": "2026-10-24T09:12:41.902113+00:00",
+    "date_validated": null,
+    "lifetime": null,
+    "max_parallel_override": null,
+    "budget": 0,
+    "comment": "",
+    "is_application": false,
+    "is_enabled": true,
+    "is_pending": false,
+    "is_updating": false,
+    "is_legacy": false,
+    "litellm_info": {
+      "key_name": "sk-...AX3Q",
+      "key_alias": "***",
+      "spend": 0.0,
+      "expires": null
+    }
+  },
+  {
+    "id": 834,
+    "name": "AiReviewer",
+    "key_id": "***",
+    "key_uuid": "***",
+    "pool": "BASIC",
+    "unit": 10208,
+    "date_created": "2026-02-03T11:20:00.114000+00:00",
+    "date_validated": "2026-02-04T08:00:00.000000+00:00",
+    "lifetime": null,
+    "max_parallel_override": null,
+    "budget": 0,
+    "comment": "",
+    "is_application": true,
+    "is_enabled": true,
+    "is_pending": false,
+    "is_updating": false,
+    "is_legacy": false,
+    "litellm_info": {
+      "key_name": "sk-...06FD",
+      "key_alias": "***",
+      "spend": 0.0,
+      "expires": null
+    }
+  }
+]
