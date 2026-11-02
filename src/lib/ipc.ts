@@ -43,6 +43,15 @@ export interface OpenWorkState {
   databases: string[]
 }
 
+export interface ConfigureOpenworkOutcome {
+  configDir: string
+  providerWritten: boolean
+  envWritten: boolean
+  workspaceConfigWritten: boolean
+  defaultModelWorkspaceId: string | null
+  defaultModelWritten: boolean
+}
+
 export interface StateRepair {
   backups: string[]
 }
@@ -56,6 +65,8 @@ export const opencodeStatus = () => invoke<InstallStatus>('opencode_status')
 export const installOpencode = () => invoke<InstallResult>('install_opencode')
 export const openworkStatus = () => invoke<InstallStatus>('openwork_status')
 export const installOpenwork = () => invoke<InstallResult>('install_openwork')
+export const configureOpenwork = (token: string) =>
+  invoke<ConfigureOpenworkOutcome>('configure_openwork', { token })
 export const launchOpenwork = () => invoke<void>('launch_openwork')
 export const openworkStateStatus = () => invoke<OpenWorkState>('openwork_state_status')
 export const openworkRepairState = () => invoke<StateRepair>('openwork_repair_state')

@@ -21,6 +21,7 @@ pub fn run() {
             openwork::openwork_status,
             openwork::install_openwork,
             openwork::launch_openwork,
+            openwork::configure_openwork,
             openwork_state::openwork_state_status,
             openwork_state::openwork_repair_state,
             smoke::smoke_test,

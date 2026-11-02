@@ -13,6 +13,7 @@ export interface StepResult {
   kind?: string
   version?: string
   path?: string
+  configDir?: string
   ok?: boolean
   detail?: string
   keyName?: string

@@ -27,6 +27,7 @@ tar = "0.4"
 tokio = { version = "1", default-features = false, features = ["time"] }
 tauri-plugin-fs = "2"
 zip = { version = "9", default-features = false, features = ["deflate"] }
+rusqlite = { version = "0.41.1", features = ["bundled"] }
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }

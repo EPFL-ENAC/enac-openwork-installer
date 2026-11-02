@@ -661,6 +661,765 @@ pub fn verify_file_sha512(path: &Path, expected_b64: &str) -> Result<(), AppErro
     Ok(())
 }
 
+// ===== OpenWork runtime configuration =====
+//
+// The bundled v2 engine mirrors providers from OpenWork's own runtime config
+// (runtime.sqlite row "__openwork_engine_global__") and resolves "{env:NAME}"
+// templates of machine-owned providers against the env store (env.json); the
+// machine-ownership row approves exactly that resolution. The workspace
+// default model lives in workspace_default_models. The desktop keeps its
+// workspace list in <Electron user data>/openwork-workspaces.json and adopts
+// ~/OpenWork Chat at the first launch, so a fresh folder already has the id
+// the desktop will compute.
+
+pub const OPENWORK_PROVIDER_ID: &str = "epfl-aiaas";
+pub const OPENWORK_ENV_KEY: &str = "EPFL_AIAAS_API_KEY";
+const RCP_BASE_URL: &str = "https://inference-rcp.epfl.ch/v1";
+const ENGINE_GLOBAL_ID: &str = "__openwork_engine_global__";
+const MACHINE_OWNERSHIP_ID: &str = "__machine_provider_template_ownership__";
+const OPENWORK_USER_DATA_DIR: &str = "com.differentai.openwork";
+const OPENWORK_CHAT_DIR: &str = "OpenWork Chat";
+const ENV_STORE_FILE: &str = "env.json";
+const RUNTIME_DB_FILE: &str = "runtime.sqlite";
+const WORKSPACE_STATE_FILE: &str = "openwork-workspaces.json";
+const WORKSPACE_CONFIG_FILE: &str = "opencode.jsonc";
+
+/// What one configure run changed, for the trace and the step result.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenworkConfigureOutcome {
+    pub config_dir: String,
+    pub provider_written: bool,
+    pub env_written: bool,
+    pub workspace_config_written: bool,
+    pub default_model_workspace_id: Option<String>,
+    pub default_model_written: bool,
+}
+
+/// The RCP provider in the V1 shape OpenWork documents for custom providers.
+fn provider_definition() -> serde_json::Value {
+    serde_json::json!({
+        "npm": "@ai-sdk/openai-compatible",
+        "name": "RCP AI Inference as a Service",
+        "options": {
+            "apiKey": format!("{{env:{OPENWORK_ENV_KEY}}}"),
+            "baseURL": RCP_BASE_URL,
+        },
+        "models": {
+            "large": {
+                "name": "RCP AIaaS Large",
+                "attachment": true,
+                "modalities": {"input": ["text", "image"], "output": ["text"]},
+            },
+            "small": {
+                "name": "RCP AIaaS Small",
+                "attachment": true,
+                "modalities": {"input": ["text", "image"], "output": ["text"]},
+                "variants": {
+                    "none": {"reasoningEffort": "none"},
+                    "low": {"reasoningEffort": "low"},
+                    "high": {"reasoningEffort": "high"},
+                    "xhigh": {"reasoningEffort": "xhigh"},
+                    "max": {"reasoningEffort": "max"},
+                },
+            },
+        },
+    })
+}
+
+/// The machine-ownership approval binds the template privilege to this exact
+/// definition, so the hash must match OpenWork's providerConfigFingerprint:
+/// stable JSON with keys sorted by localeCompare, sha256 hex. serde_json maps
+/// sort by byte order, which agrees with localeCompare for every key in the
+/// definition above; the frozen-value test pins the contract.
+fn provider_fingerprint(value: &serde_json::Value) -> String {
+    use sha2::Digest as _;
+    let canonical = serde_json::to_string(value).unwrap_or_else(|_| "null".to_string());
+    let digest = sha2::Sha256::digest(canonical.as_bytes());
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn default_model_value() -> serde_json::Value {
+    serde_json::json!({"providerID": OPENWORK_PROVIDER_ID, "modelID": "large"})
+}
+
+/// The key rules OpenWork's env store applies: a name token that is not one of
+/// its own reserved prefixes.
+fn valid_env_key(key: &str) -> bool {
+    let upper = key.to_ascii_uppercase();
+    if upper.starts_with("OPENWORK_") || upper.starts_with("OPENCODE_") {
+        return false;
+    }
+    let bytes = key.as_bytes();
+    match bytes.first() {
+        Some(first) if first.is_ascii_alphabetic() || *first == b'_' => {}
+        _ => return false,
+    }
+    bytes[1..]
+        .iter()
+        .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+}
+
+/// Merges one variable into the env store, preserving everything else.
+/// A store that parses but holds unexpected shapes is an error, not a reset:
+/// the file holds secrets and silently dropping them would lose them.
+fn merge_env_store(
+    existing: Option<serde_json::Value>,
+    key: &str,
+    value: &str,
+    now: i64,
+) -> Result<(serde_json::Value, bool), AppError> {
+    if !valid_env_key(key) {
+        return Err(AppError::new(
+            "invalid-key",
+            format!("{key} is not a valid environment variable name"),
+        ));
+    }
+    let mut store = existing.unwrap_or_else(
+        || serde_json::json!({"schemaVersion": 1, "updatedAt": now, "variables": []}),
+    );
+    let Some(object) = store.as_object_mut() else {
+        return Err(AppError::parse(
+            "the OpenWork environment store is not a JSON object",
+        ));
+    };
+    object
+        .entry("schemaVersion")
+        .or_insert(serde_json::json!(1));
+    let variables = object.entry("variables").or_insert(serde_json::json!([]));
+    let Some(list) = variables.as_array_mut() else {
+        return Err(AppError::parse(
+            "the OpenWork environment store holds no variable list",
+        ));
+    };
+    for entry in list.iter_mut() {
+        let Some(entry_object) = entry.as_object_mut() else {
+            return Err(AppError::parse(
+                "the OpenWork environment store holds a variable that is not an object",
+            ));
+        };
+        if entry_object.get("key").and_then(serde_json::Value::as_str) != Some(key) {
+            continue;
+        }
+        if entry_object
+            .get("value")
+            .and_then(serde_json::Value::as_str)
+            == Some(value)
+        {
+            return Ok((store, false));
+        }
+        entry_object.insert("value".into(), serde_json::json!(value));
+        entry_object.insert("updatedAt".into(), serde_json::json!(now));
+        object.insert("updatedAt".into(), serde_json::json!(now));
+        return Ok((store, true));
+    }
+    list.push(serde_json::json!({"key": key, "value": value, "updatedAt": now}));
+    sort_env_variables(list);
+    object.insert("updatedAt".into(), serde_json::json!(now));
+    Ok((store, true))
+}
+
+fn sort_env_variables(list: &mut [serde_json::Value]) {
+    list.sort_by_key(|entry| {
+        entry
+            .get("key")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("")
+            .to_string()
+    });
+}
+
+/// Adds the RCP provider to the engine-global runtime config, keeping every
+/// other provider and setting (for example disabled_providers) in place.
+fn merge_runtime_provider(
+    existing: serde_json::Value,
+) -> Result<(serde_json::Value, bool), AppError> {
+    let definition = provider_definition();
+    let mut next = existing;
+    let Some(object) = next.as_object_mut() else {
+        return Err(AppError::parse(
+            "the OpenWork runtime config row is not a JSON object",
+        ));
+    };
+    let providers = object.entry("provider").or_insert(serde_json::json!({}));
+    let Some(providers) = providers.as_object_mut() else {
+        return Err(AppError::parse(
+            "the OpenWork runtime config holds no provider map",
+        ));
+    };
+    if providers.get(OPENWORK_PROVIDER_ID) == Some(&definition) {
+        return Ok((next, false));
+    }
+    providers.insert(OPENWORK_PROVIDER_ID.to_string(), definition);
+    Ok((next, true))
+}
+
+/// Approves the template resolution of our provider for this exact definition.
+fn merge_machine_ownership(
+    existing: serde_json::Value,
+    fingerprint: &str,
+) -> Result<(serde_json::Value, bool), AppError> {
+    let mut next = existing;
+    let Some(object) = next.as_object_mut() else {
+        return Err(AppError::parse(
+            "the OpenWork machine ownership row is not a JSON object",
+        ));
+    };
+    if object
+        .get(OPENWORK_PROVIDER_ID)
+        .and_then(serde_json::Value::as_str)
+        == Some(fingerprint)
+    {
+        return Ok((next, false));
+    }
+    object.insert(
+        OPENWORK_PROVIDER_ID.to_string(),
+        serde_json::json!(fingerprint),
+    );
+    Ok((next, true))
+}
+
+/// The workspace the desktop selects, from the state file it maintains.
+fn pick_workspace_id(state: &serde_json::Value) -> Option<String> {
+    for key in [
+        "selectedId",
+        "selectedWorkspaceId",
+        "activeId",
+        "activeWorkspaceId",
+        "watchedId",
+        "watchedWorkspaceId",
+    ] {
+        if let Some(id) = state.get(key).and_then(serde_json::Value::as_str) {
+            let id = id.trim();
+            if !id.is_empty() {
+                return Some(id.to_string());
+            }
+        }
+    }
+    let workspaces = state
+        .get("workspaces")
+        .and_then(serde_json::Value::as_array)?;
+    workspaces.iter().find_map(|entry| {
+        let kind = entry
+            .get("workspaceType")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("local");
+        let id = entry
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)?;
+        (kind == "local" && !id.is_empty()).then(|| id.to_string())
+    })
+}
+
+/// `ws_` plus the first 12 hex digits of the sha256 of the path, exactly the
+/// derivation of the desktop's stableWorkspaceId and the server's
+/// workspaceIdForPath.
+fn workspace_id_for_path(path: &str) -> String {
+    use sha2::Digest as _;
+    let digest = sha2::Sha256::digest(path.as_bytes());
+    let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+    format!("ws_{}", &hex[..12])
+}
+
+/// The path string the desktop hashes: resolved on Unix (it realpaths the
+/// folder), lexical on Windows where the desktop resolution keeps backslashes.
+fn workspace_path_string(path: &Path) -> String {
+    if std::env::consts::OS == "windows" {
+        path.to_string_lossy().into_owned()
+    } else {
+        std::fs::canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf())
+            .to_string_lossy()
+            .into_owned()
+    }
+}
+
+fn default_workspace_dir(home: &Path) -> PathBuf {
+    home.join(OPENWORK_CHAT_DIR)
+}
+
+fn unix_openwork_config_dir(xdg_config_home: Option<&std::ffi::OsStr>, home: &Path) -> PathBuf {
+    let root = xdg_config_home
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".config"));
+    root.join("openwork")
+}
+
+fn windows_openwork_config_dir(appdata: Option<&std::ffi::OsStr>, home: &Path) -> PathBuf {
+    let root = appdata
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join("AppData/Roaming"));
+    root.join("openwork")
+}
+
+/// Electron's app.getPath("appData") plus the packaged app identifier, which
+/// is where the desktop keeps openwork-workspaces.json.
+fn electron_user_data_dir(os: &str, config_base: Option<&std::ffi::OsStr>, home: &Path) -> PathBuf {
+    let root = match os {
+        "windows" => config_base
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join("AppData/Roaming")),
+        "macos" => home.join("Library/Application Support"),
+        _ => config_base
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".config")),
+    };
+    root.join(OPENWORK_USER_DATA_DIR)
+}
+
+fn openwork_config_dir() -> Result<PathBuf, AppError> {
+    let home = util::home_dir()
+        .ok_or_else(|| AppError::io("cannot find the home directory of the user"))?;
+    let os = std::env::consts::OS;
+    let base = if os == "windows" {
+        std::env::var_os("APPDATA")
+    } else {
+        std::env::var_os("XDG_CONFIG_HOME")
+    };
+    Ok(match os {
+        "windows" => windows_openwork_config_dir(base.as_deref(), &home),
+        _ => unix_openwork_config_dir(base.as_deref(), &home),
+    })
+}
+
+/// Reads one config_json row. A missing database, table or row is "absent",
+/// so a first run on an existing install works as well as a fresh one.
+fn read_config_row(db: &Path, workspace_id: &str) -> Result<Option<String>, AppError> {
+    read_runtime_row(db, "runtime_opencode_configs", "config_json", workspace_id)
+}
+
+fn read_model_row(db: &Path, workspace_id: &str) -> Result<Option<String>, AppError> {
+    read_runtime_row(db, "workspace_default_models", "model_json", workspace_id)
+}
+
+fn read_runtime_row(
+    db: &Path,
+    table: &str,
+    column: &str,
+    workspace_id: &str,
+) -> Result<Option<String>, AppError> {
+    use rusqlite::params;
+    if !db.is_file() {
+        return Ok(None);
+    }
+    let connection =
+        rusqlite::Connection::open_with_flags(db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|e| AppError::io(format!("cannot open {}: {e}", db.display())))?;
+    connection
+        .busy_timeout(std::time::Duration::from_secs(5))
+        .map_err(|e| AppError::io(format!("cannot wait for {}: {e}", db.display())))?;
+    let present: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            params![table],
+            |row| row.get(0),
+        )
+        .map_err(|e| AppError::io(format!("cannot read {}: {e}", db.display())))?;
+    if present == 0 {
+        return Ok(None);
+    }
+    connection
+        .query_row(
+            &format!("SELECT {column} FROM {table} WHERE workspace_id = ?1"),
+            params![workspace_id],
+            |row| row.get::<_, String>(0),
+        )
+        .map(Some)
+        .or_else(|error| match error {
+            rusqlite::Error::QueryReturnedNoRows => Ok(None),
+            other => Err(AppError::io(format!(
+                "cannot read {table} in {}: {other}",
+                db.display()
+            ))),
+        })
+}
+
+/// A row value that parses or is absent. Corrupt rows stop the step instead of
+/// being overwritten: the row drives OpenWork's provider configuration and a
+/// blind reset would drop the user's own providers.
+fn parse_row_value(row: Option<String>, label: &str) -> Result<serde_json::Value, AppError> {
+    match row {
+        None => Ok(serde_json::json!({})),
+        Some(text) => {
+            let value: serde_json::Value = serde_json::from_str(&text)
+                .map_err(|e| AppError::parse(format!("{label} is not valid JSON: {e}")))?;
+            if value.is_object() {
+                Ok(value)
+            } else {
+                Err(AppError::parse(format!("{label} is not a JSON object")))
+            }
+        }
+    }
+}
+
+struct RuntimeRowWrite {
+    table: &'static str,
+    column: &'static str,
+    workspace_id: String,
+    json: String,
+}
+
+fn write_runtime_rows(db: &Path, writes: &[RuntimeRowWrite], now: i64) -> Result<(), AppError> {
+    use rusqlite::params;
+    if let Some(parent) = db.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| AppError::io(format!("cannot create {}: {e}", parent.display())))?;
+    }
+    let mut connection = rusqlite::Connection::open(db)
+        .map_err(|e| AppError::io(format!("cannot create {}: {e}", db.display())))?;
+    connection
+        .busy_timeout(std::time::Duration::from_secs(5))
+        .map_err(|e| AppError::io(format!("cannot wait for {}: {e}", db.display())))?;
+    let transaction = connection
+        .transaction()
+        .map_err(|e| AppError::io(format!("cannot start writing {}: {e}", db.display())))?;
+    transaction
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS runtime_opencode_configs (workspace_id TEXT PRIMARY KEY NOT NULL, config_json TEXT NOT NULL, updated_at INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS openwork_workspace_configs (workspace_id TEXT PRIMARY KEY NOT NULL, config_json TEXT NOT NULL, updated_at INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS workspace_default_models (workspace_id TEXT PRIMARY KEY NOT NULL, model_json TEXT NOT NULL, updated_at INTEGER NOT NULL);",
+        )
+        .map_err(|e| AppError::io(format!("cannot prepare {}: {e}", db.display())))?;
+    for write in writes {
+        let sql = format!(
+            "INSERT INTO {t} (workspace_id, {c}, updated_at) VALUES (?1, ?2, ?3) \
+             ON CONFLICT(workspace_id) DO UPDATE SET {c} = excluded.{c}, updated_at = excluded.updated_at",
+            t = write.table,
+            c = write.column,
+        );
+        transaction
+            .execute(&sql, params![write.workspace_id, write.json, now])
+            .map_err(|e| {
+                AppError::io(format!(
+                    "cannot write {} in {}: {e}",
+                    write.table,
+                    db.display()
+                ))
+            })?;
+    }
+    transaction
+        .commit()
+        .map_err(|e| AppError::io(format!("cannot finish writing {}: {e}", db.display())))
+}
+
+/// Writes the env store atomically, owner-only. The config dir may not exist
+/// yet on a machine where OpenWork never ran.
+fn write_env_store(path: &Path, store: &serde_json::Value) -> Result<(), AppError> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| AppError::io(format!("cannot create {}: {e}", parent.display())))?;
+    }
+    let temporary = path.with_extension("json.tmp");
+    let text = format!(
+        "{}\n",
+        serde_json::to_string_pretty(store)
+            .map_err(|e| AppError::parse(format!("cannot serialize the env store: {e}")))?
+    );
+    std::fs::write(&temporary, &text)
+        .map_err(|e| AppError::io(format!("cannot write {}: {e}", temporary.display())))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&temporary, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| AppError::io(format!("cannot restrict {}: {e}", temporary.display())))?;
+    }
+    std::fs::rename(&temporary, path)
+        .map_err(|e| AppError::io(format!("cannot update {}: {e}", path.display())))
+}
+
+/// The workspace the default model belongs to: the desktop's selected one when
+/// it has run, otherwise the folder the desktop adopts at its first launch.
+struct WorkspaceTarget {
+    id: String,
+    path: Option<PathBuf>,
+}
+
+fn resolve_default_workspace(
+    user_data_dir: &Path,
+    home: &Path,
+) -> Result<Option<WorkspaceTarget>, AppError> {
+    let state_path = user_data_dir.join(WORKSPACE_STATE_FILE);
+    if !state_path.is_file() {
+        let folder = default_workspace_dir(home);
+        // Creation failures stay silent: the desktop creates the same folder on
+        // its first launch, and the lexical fallback yields the same id.
+        let _ = std::fs::create_dir_all(&folder);
+        return Ok(Some(WorkspaceTarget {
+            id: workspace_id_for_path(&workspace_path_string(&folder)),
+            path: Some(folder),
+        }));
+    }
+    let text = std::fs::read_to_string(&state_path)
+        .map_err(|e| AppError::io(format!("cannot read {}: {e}", state_path.display())))?;
+    let Ok(state) = serde_json::from_str::<serde_json::Value>(&text) else {
+        // A state file the desktop cannot read either: it rebuilds its list on
+        // the next launch, so the default model has no workspace yet.
+        return Ok(None);
+    };
+    let Some(id) = pick_workspace_id(&state) else {
+        return Ok(None);
+    };
+    // The folder the desktop recorded for that workspace, when it is local.
+    let path = state
+        .get("workspaces")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|list| {
+            list.iter().find_map(|entry| {
+                let same = entry.get("id").and_then(serde_json::Value::as_str) == Some(id.as_str());
+                let kind = entry
+                    .get("workspaceType")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("local");
+                let folder = entry
+                    .get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .filter(|path| !path.is_empty())?;
+                (same && kind == "local").then(|| PathBuf::from(folder))
+            })
+        });
+    Ok(Some(WorkspaceTarget { id, path }))
+}
+
+/// The documented V1 channel: the workspace opencode.jsonc carries the same
+/// provider definition. A file with JSONC comments is left alone (the runtime
+/// rows carry the provider there), and an existing plain-JSON file is merged.
+fn merge_workspace_config(workspace_dir: &Path) -> Result<bool, AppError> {
+    let path = workspace_dir.join(WORKSPACE_CONFIG_FILE);
+    let existing = match std::fs::read_to_string(&path) {
+        Ok(text) => serde_json::from_str::<serde_json::Value>(&text).unwrap_or_else(|_| {
+            serde_json::Value::String(text) // sentinel: not plain JSON
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => serde_json::json!({}),
+        Err(error) => {
+            return Err(AppError::io(format!(
+                "cannot read {}: {error}",
+                path.display()
+            )))
+        }
+    };
+    if existing.is_string() {
+        return Ok(false);
+    }
+    let (next, changed) = merge_runtime_provider(existing)?;
+    if !changed {
+        return Ok(false);
+    }
+    let text = format!(
+        "{}\n",
+        serde_json::to_string_pretty(&next)
+            .map_err(|e| AppError::parse(format!("cannot serialize the workspace config: {e}")))?
+    );
+    if let Some(parent) = path.parent() {
+        // A workspace folder that cannot be created means the desktop recorded
+        // a path that is gone; the runtime rows carry the provider, so the
+        // workspace file is skipped instead of failing the step.
+        if std::fs::create_dir_all(parent).is_err() {
+            return Ok(false);
+        }
+    }
+    std::fs::write(&path, &text)
+        .map_err(|e| AppError::io(format!("cannot write {}: {e}", path.display())))?;
+    Ok(true)
+}
+
+/// One configure run: env store, workspace opencode.jsonc, provider rows,
+/// default model. Every write is idempotent, so a retry only rewrites what
+/// changed.
+pub fn configure_openwork_in(
+    config_dir: &Path,
+    user_data_dir: &Path,
+    home: &Path,
+    token: &str,
+    now: i64,
+) -> Result<OpenworkConfigureOutcome, AppError> {
+    let mut outcome = OpenworkConfigureOutcome {
+        config_dir: config_dir.display().to_string(),
+        provider_written: false,
+        env_written: false,
+        workspace_config_written: false,
+        default_model_workspace_id: None,
+        default_model_written: false,
+    };
+    let token = token.trim();
+    if token.is_empty() {
+        return Err(AppError::new(
+            "missing-key",
+            "no RCP key is available for the OpenWork configuration",
+        ));
+    }
+
+    let env_path = config_dir.join(ENV_STORE_FILE);
+    let existing = match std::fs::read_to_string(&env_path) {
+        Ok(text) => Some(parse_json_object(
+            &text,
+            &format!("the OpenWork environment store {}", env_path.display()),
+        )?),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => {
+            return Err(AppError::io(format!(
+                "cannot read {}: {error}",
+                env_path.display()
+            )))
+        }
+    };
+    let (store, env_changed) = merge_env_store(existing, OPENWORK_ENV_KEY, token, now)?;
+    if env_changed {
+        write_env_store(&env_path, &store)?;
+    }
+    outcome.env_written = env_changed;
+
+    let db_path = config_dir.join(RUNTIME_DB_FILE);
+    let fingerprint = provider_fingerprint(&provider_definition());
+    let runtime = parse_row_value(
+        read_config_row(&db_path, ENGINE_GLOBAL_ID)?,
+        "the OpenWork runtime config row",
+    )?;
+    let (runtime_next, runtime_changed) = merge_runtime_provider(runtime)?;
+    let ownership = parse_row_value(
+        read_runtime_row(
+            &db_path,
+            "openwork_workspace_configs",
+            "config_json",
+            MACHINE_OWNERSHIP_ID,
+        )?,
+        "the OpenWork machine ownership row",
+    )?;
+    let (ownership_next, ownership_changed) = merge_machine_ownership(ownership, &fingerprint)?;
+
+    let (workspace_id, workspace_path, model_changed) =
+        match resolve_default_workspace(user_data_dir, home)? {
+            Some(target) => {
+                let stored = read_model_row(&db_path, &target.id)?;
+                let changed = match stored {
+                    Some(text) => serde_json::from_str::<serde_json::Value>(&text)
+                        .map(|stored| stored != default_model_value())
+                        .unwrap_or(true),
+                    None => true,
+                };
+                (Some(target.id), target.path, changed)
+            }
+            None => (None, None, false),
+        };
+    outcome.default_model_workspace_id = workspace_id.clone();
+    if let Some(workspace_dir) = &workspace_path {
+        outcome.workspace_config_written = merge_workspace_config(workspace_dir)?;
+    }
+
+    let mut writes = Vec::new();
+    if runtime_changed {
+        writes.push(RuntimeRowWrite {
+            table: "runtime_opencode_configs",
+            column: "config_json",
+            workspace_id: ENGINE_GLOBAL_ID.to_string(),
+            json: runtime_next.to_string(),
+        });
+    }
+    if ownership_changed {
+        writes.push(RuntimeRowWrite {
+            table: "openwork_workspace_configs",
+            column: "config_json",
+            workspace_id: MACHINE_OWNERSHIP_ID.to_string(),
+            json: ownership_next.to_string(),
+        });
+    }
+    if model_changed {
+        if let Some(workspace_id) = &outcome.default_model_workspace_id {
+            writes.push(RuntimeRowWrite {
+                table: "workspace_default_models",
+                column: "model_json",
+                workspace_id: workspace_id.clone(),
+                json: default_model_value().to_string(),
+            });
+        }
+    }
+    if !writes.is_empty() {
+        write_runtime_rows(&db_path, &writes, now)?;
+    }
+    outcome.provider_written = runtime_changed || ownership_changed;
+    outcome.default_model_written = model_changed;
+    Ok(outcome)
+}
+
+fn parse_json_object(text: &str, label: &str) -> Result<serde_json::Value, AppError> {
+    let value: serde_json::Value = serde_json::from_str(text)
+        .map_err(|e| AppError::parse(format!("{label} is not valid JSON: {e}")))?;
+    if value.is_object() {
+        Ok(value)
+    } else {
+        Err(AppError::parse(format!("{label} is not a JSON object")))
+    }
+}
+
+fn configure_openwork_blocking(token: &str) -> Result<OpenworkConfigureOutcome, AppError> {
+    let home = util::home_dir()
+        .ok_or_else(|| AppError::io("cannot find the home directory of the user"))?;
+    let config_dir = openwork_config_dir()?;
+    let os = std::env::consts::OS;
+    let base = if os == "windows" {
+        std::env::var_os("APPDATA")
+    } else {
+        std::env::var_os("XDG_CONFIG_HOME")
+    };
+    configure_openwork_in(
+        &config_dir,
+        &electron_user_data_dir(os, base.as_deref(), &home),
+        &home,
+        token,
+        now_ms(),
+    )
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_millis() as i64)
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+pub async fn configure_openwork(
+    token: String,
+    app: tauri::AppHandle,
+) -> Result<OpenworkConfigureOutcome, AppError> {
+    let log = Logger::new(&app, "openwork");
+    let trimmed = token.trim().to_string();
+    let outcome = util::spawn_blocking(move || configure_openwork_blocking(&trimmed)).await??;
+    log.log(format!(
+        "the OpenWork configuration lives in {}",
+        outcome.config_dir
+    ));
+    log.log(if outcome.provider_written {
+        format!("the {OPENWORK_PROVIDER_ID} provider is written into the OpenWork runtime config")
+    } else {
+        format!("the {OPENWORK_PROVIDER_ID} provider is already configured in OpenWork")
+    });
+    log.log(if outcome.env_written {
+        format!("the RCP key is stored in the OpenWork environment store as {OPENWORK_ENV_KEY}")
+    } else {
+        "the RCP key is already stored in the OpenWork environment store".to_string()
+    });
+    log.log(if outcome.workspace_config_written {
+        format!("the workspace opencode.jsonc includes the {OPENWORK_PROVIDER_ID} provider")
+    } else {
+        format!(
+            "the workspace opencode.jsonc already includes the {OPENWORK_PROVIDER_ID} provider or is not plain JSON"
+        )
+    });
+    match (&outcome.default_model_workspace_id, outcome.default_model_written) {
+        (Some(workspace_id), true) => log.log(format!(
+            "the default model is set to {OPENWORK_PROVIDER_ID}/large for the OpenWork workspace {workspace_id}"
+        )),
+        (Some(_), false) => log.log(format!(
+            "the default model {OPENWORK_PROVIDER_ID}/large is already set for this OpenWork workspace"
+        )),
+        (None, _) => log.log(
+            "OpenWork has no workspace yet, its default model is set when OpenWork creates one",
+        ),
+    }
+    Ok(outcome)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1128,5 +1887,687 @@ mod tests {
         assert_eq!(asset.name, "openwork-linux-x86_64-0.18.63.AppImage");
         assert!(!asset.name.contains("cloud"));
         assert!(!asset.name.contains("enterprise"));
+    }
+
+    // --- OpenWork configuration: env store, runtime rows, default model ---
+
+    const STATE_FILE: &str = r#"{
+  "selectedId": "ws_05771fd9f545",
+  "watchedId": "ws_05771fd9f545",
+  "activeId": "ws_05771fd9f545",
+  "workspaces": [
+    {
+      "id": "ws_05771fd9f545",
+      "name": "openwork-test",
+      "path": "/home/tester/Downloads/openwork-test",
+      "preset": "starter",
+      "workspaceType": "local",
+      "remoteType": null,
+      "baseUrl": null,
+      "directory": null,
+      "displayName": null,
+      "openworkHostUrl": null,
+      "openworkToken": null,
+      "openworkClientToken": null,
+      "openworkHostToken": null,
+      "openworkWorkspaceId": null,
+      "openworkWorkspaceName": null,
+      "sandboxBackend": null,
+      "sandboxRunId": null,
+      "sandboxContainerName": null
+    }
+  ],
+  "selectedWorkspaceId": "ws_05771fd9f545",
+  "watchedWorkspaceId": "ws_05771fd9f545"
+}"#;
+
+    fn env_store(now: i64) -> serde_json::Value {
+        serde_json::json!({
+            "schemaVersion": 1,
+            "updatedAt": now,
+            "variables": [
+                {"key": "MY_VAR", "value": "one", "updatedAt": now},
+                {"key": "OTHER", "value": "two", "updatedAt": now}
+            ]
+        })
+    }
+
+    fn configure_dir(tag: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("openwork-configure-{}-{tag}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// A state file the desktop would write for one local workspace under a
+    /// temporary folder, so the workspace config write stays inside the test
+    /// sandbox.
+    fn state_with_workspace(id: &str, workspace_dir: &Path) -> String {
+        serde_json::json!({
+            "selectedId": id,
+            "workspaces": [
+                {"id": id, "name": "openwork-test", "path": workspace_dir.display().to_string(), "workspaceType": "local"}
+            ]
+        })
+        .to_string()
+    }
+
+    fn read_row(db: &Path, sql: &str, id: &str) -> Option<String> {
+        let conn =
+            rusqlite::Connection::open_with_flags(db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .unwrap();
+        conn.query_row(sql, [id], |row| row.get::<_, String>(0))
+            .ok()
+    }
+
+    fn runtime_config_json(db: &Path, id: &str) -> Option<String> {
+        read_row(
+            db,
+            "SELECT config_json FROM runtime_opencode_configs WHERE workspace_id = ?1",
+            id,
+        )
+    }
+
+    fn workspace_config_json(db: &Path, id: &str) -> Option<String> {
+        read_row(
+            db,
+            "SELECT config_json FROM openwork_workspace_configs WHERE workspace_id = ?1",
+            id,
+        )
+    }
+
+    fn default_model_json(db: &Path, id: &str) -> Option<String> {
+        read_row(
+            db,
+            "SELECT model_json FROM workspace_default_models WHERE workspace_id = ?1",
+            id,
+        )
+    }
+
+    fn seeded_db(db: &Path) {
+        let conn = rusqlite::Connection::open(db).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE runtime_opencode_configs (workspace_id TEXT PRIMARY KEY NOT NULL, config_json TEXT NOT NULL, updated_at INTEGER NOT NULL);
+             CREATE TABLE workspace_default_models (workspace_id TEXT PRIMARY KEY NOT NULL, model_json TEXT NOT NULL, updated_at INTEGER NOT NULL);
+             INSERT INTO runtime_opencode_configs VALUES ('__openwork_engine_global__', '{\"disabled_providers\":[\"opencode\"],\"provider\":{\"openwork-free\":{\"name\":\"OpenWork Models (Free)\",\"npm\":\"@ai-sdk/openai\"}}}', 1);
+             INSERT INTO workspace_default_models VALUES ('ws_other', '{\"providerID\":\"other\",\"modelID\":\"model\"}', 1);",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn builds_the_v1_shape_provider_definition() {
+        let definition = provider_definition();
+        assert_eq!(definition["npm"], "@ai-sdk/openai-compatible");
+        assert_eq!(definition["name"], "RCP AI Inference as a Service");
+        assert_eq!(
+            definition["options"]["baseURL"],
+            "https://inference-rcp.epfl.ch/v1"
+        );
+        assert_eq!(definition["options"]["apiKey"], "{env:EPFL_AIAAS_API_KEY}");
+        let models = definition["models"].as_object().unwrap();
+        assert_eq!(models.keys().collect::<Vec<_>>(), ["large", "small"]);
+        assert_eq!(definition["models"]["large"]["name"], "RCP AIaaS Large");
+        assert_eq!(
+            definition["models"]["small"]["modalities"]["input"],
+            serde_json::json!(["text", "image"])
+        );
+    }
+
+    #[test]
+    fn fingerprints_the_provider_like_the_opencode_canonical_form() {
+        // Frozen from OpenWork v0.18.63 providerConfigFingerprint: stable JSON
+        // with keys sorted by localeCompare, sha256 hex. Computed with node.
+        assert_eq!(
+            provider_fingerprint(&provider_definition()),
+            "97b8e86e7d19f2b288d68d727a011c2db7e12b9ae82fc39b6b196cf5f8bc77b2"
+        );
+    }
+
+    #[test]
+    fn derives_workspace_ids_like_opencode() {
+        assert_eq!(
+            workspace_id_for_path("/home/tester/Downloads/openwork-test"),
+            "ws_e4d0e7ca2c80"
+        );
+        assert_eq!(workspace_id_for_path(""), {
+            use sha2::Digest as _;
+            let digest = sha2::Sha256::digest(b"");
+            format!(
+                "ws_{}",
+                &digest
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()[..12]
+            )
+        });
+    }
+
+    #[test]
+    fn builds_the_openwork_config_dir_per_platform() {
+        use std::ffi::OsStr;
+        let home = Path::new("/home/tester");
+        assert_eq!(
+            unix_openwork_config_dir(None, home),
+            home.join(".config/openwork")
+        );
+        assert_eq!(
+            unix_openwork_config_dir(Some(OsStr::new("/xdg")), home),
+            PathBuf::from("/xdg/openwork")
+        );
+        let windows_home = Path::new(r"C:\Users\tester");
+        let fallback = windows_openwork_config_dir(None, windows_home);
+        assert_eq!(fallback.file_name().unwrap(), "openwork");
+        assert!(fallback.starts_with(windows_home.join("AppData/Roaming")));
+        let explicit = windows_openwork_config_dir(
+            Some(OsStr::new(r"C:\Users\tester\AppData\Roaming")),
+            windows_home,
+        );
+        assert_eq!(explicit.file_name().unwrap(), "openwork");
+        assert!(explicit.starts_with(r"C:\Users\tester\AppData\Roaming"));
+    }
+
+    #[test]
+    fn builds_the_electron_user_data_dir_per_platform() {
+        use std::ffi::OsStr;
+        let home = Path::new("/home/tester");
+        assert_eq!(
+            electron_user_data_dir("linux", None, home),
+            home.join(".config/com.differentai.openwork")
+        );
+        assert_eq!(
+            electron_user_data_dir("linux", Some(OsStr::new("/xdg")), home),
+            PathBuf::from("/xdg/com.differentai.openwork")
+        );
+        assert_eq!(
+            electron_user_data_dir("macos", None, home),
+            home.join("Library/Application Support/com.differentai.openwork")
+        );
+        let windows_home = Path::new(r"C:\Users\tester");
+        assert_eq!(
+            electron_user_data_dir("windows", None, windows_home),
+            windows_home.join("AppData/Roaming/com.differentai.openwork")
+        );
+    }
+
+    #[test]
+    fn merges_the_env_store_and_preserves_existing_variables() {
+        let (merged, changed) =
+            merge_env_store(Some(env_store(1)), OPENWORK_ENV_KEY, "tok", 99).unwrap();
+        assert!(changed);
+        assert_eq!(merged["schemaVersion"], 1);
+        assert_eq!(merged["updatedAt"], 99);
+        let variables = merged["variables"].as_array().unwrap();
+        assert_eq!(
+            variables
+                .iter()
+                .map(|entry| entry["key"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            ["EPFL_AIAAS_API_KEY", "MY_VAR", "OTHER"]
+        );
+        assert!(variables[0]["value"] == "tok" && variables[1]["value"] == "one");
+    }
+
+    #[test]
+    fn env_store_merges_are_idempotent_for_the_same_value() {
+        let (merged, changed) =
+            merge_env_store(Some(env_store(1)), OPENWORK_ENV_KEY, "tok", 99).unwrap();
+        assert!(changed);
+        let (again, changed) = merge_env_store(Some(merged), OPENWORK_ENV_KEY, "tok", 100).unwrap();
+        assert!(!changed);
+        assert_eq!(again["updatedAt"], 99);
+    }
+
+    #[test]
+    fn env_store_rejects_reserved_or_malformed_keys() {
+        for key in [
+            "OPENWORK_SERVER",
+            "OPENCODE_CONFIG",
+            "openwork_home",
+            "BAD-NAME",
+            "1ABC",
+            "",
+            "A B",
+        ] {
+            assert!(
+                merge_env_store(Some(env_store(1)), key, "tok", 1).is_err(),
+                "{key} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn env_store_rejects_unexpected_shapes() {
+        let not_object = serde_json::json!([1, 2]);
+        assert!(merge_env_store(Some(not_object), OPENWORK_ENV_KEY, "tok", 1).is_err());
+        let bad_variables = serde_json::json!({"variables": "nope"});
+        assert!(merge_env_store(Some(bad_variables), OPENWORK_ENV_KEY, "tok", 1).is_err());
+        let bad_entry = serde_json::json!({"variables": ["nope"]});
+        assert!(merge_env_store(Some(bad_entry), OPENWORK_ENV_KEY, "tok", 1).is_err());
+    }
+
+    #[test]
+    fn merges_the_provider_into_an_existing_runtime_config() {
+        let existing = serde_json::json!({
+            "disabled_providers": ["opencode"],
+            "provider": {"openwork-free": {"name": "OpenWork Models (Free)"}}
+        });
+        let (merged, changed) = merge_runtime_provider(existing).unwrap();
+        assert!(changed);
+        assert_eq!(
+            merged["disabled_providers"],
+            serde_json::json!(["opencode"])
+        );
+        assert_eq!(
+            merged["provider"]["openwork-free"]["name"],
+            "OpenWork Models (Free)"
+        );
+        assert_eq!(
+            merged["provider"]["epfl-aiaas"]["npm"],
+            "@ai-sdk/openai-compatible"
+        );
+
+        let (again, changed) = merge_runtime_provider(merged).unwrap();
+        assert!(!changed);
+        assert!(again["provider"]["openwork-free"].is_object());
+    }
+
+    #[test]
+    fn rejects_a_runtime_config_with_an_unexpected_shape() {
+        assert!(merge_runtime_provider(serde_json::json!([1])).is_err());
+        assert!(merge_runtime_provider(serde_json::json!({"provider": []})).is_err());
+    }
+
+    #[test]
+    fn merges_the_machine_ownership_row() {
+        let fingerprint = provider_fingerprint(&provider_definition());
+        let existing = serde_json::json!({"openwork-free": "a".repeat(64)});
+        let (merged, changed) = merge_machine_ownership(existing, &fingerprint).unwrap();
+        assert!(changed);
+        assert_eq!(merged["epfl-aiaas"], fingerprint.as_str());
+        assert_eq!(merged["openwork-free"], "a".repeat(64));
+
+        let (again, changed) = merge_machine_ownership(merged, &fingerprint).unwrap();
+        assert!(!changed);
+        assert!(again["openwork-free"].is_string());
+    }
+
+    #[test]
+    fn picks_the_selected_workspace_from_the_state_file() {
+        let state: serde_json::Value = serde_json::from_str(STATE_FILE).unwrap();
+        assert_eq!(
+            pick_workspace_id(&state).as_deref(),
+            Some("ws_05771fd9f545")
+        );
+
+        let bare: serde_json::Value = serde_json::from_str(
+            r#"{"workspaces": [{"id": "ws_first", "workspaceType": "local"}, {"id": "ws_second"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(pick_workspace_id(&bare).as_deref(), Some("ws_first"));
+
+        let remote_only: serde_json::Value =
+            serde_json::from_str(r#"{"workspaces": [{"id": "ws_r", "workspaceType": "remote"}]}"#)
+                .unwrap();
+        assert_eq!(pick_workspace_id(&remote_only), None);
+        assert_eq!(pick_workspace_id(&serde_json::json!({})), None);
+    }
+
+    #[test]
+    fn configures_a_fresh_home_end_to_end() {
+        let config_dir = configure_dir("fresh-config");
+        let user_data = configure_dir("fresh-user-data");
+        let home = configure_dir("fresh-home");
+
+        let outcome = configure_openwork_in(
+            &config_dir,
+            &user_data,
+            &home,
+            "test-token",
+            1_700_000_000_000,
+        )
+        .unwrap();
+        assert!(outcome.provider_written);
+        assert!(outcome.env_written);
+        assert!(outcome.workspace_config_written);
+        assert!(outcome.default_model_written);
+
+        let folder = default_workspace_dir(&home);
+        assert!(folder.is_dir());
+        let expected_id = workspace_id_for_path(
+            &std::fs::canonicalize(&folder)
+                .unwrap()
+                .display()
+                .to_string(),
+        );
+        assert_eq!(
+            outcome.default_model_workspace_id.as_deref(),
+            Some(expected_id.as_str())
+        );
+
+        let env: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(config_dir.join("env.json")).unwrap())
+                .unwrap();
+        assert_eq!(env["variables"][0]["key"], OPENWORK_ENV_KEY);
+        assert_eq!(env["variables"][0]["value"], "test-token");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let mode = std::fs::metadata(config_dir.join("env.json"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+
+        let db = config_dir.join("runtime.sqlite");
+        let runtime: serde_json::Value =
+            serde_json::from_str(&runtime_config_json(&db, "__openwork_engine_global__").unwrap())
+                .unwrap();
+        assert_eq!(
+            runtime["provider"]["epfl-aiaas"]["options"]["apiKey"],
+            "{env:EPFL_AIAAS_API_KEY}"
+        );
+        let ownership: serde_json::Value = serde_json::from_str(
+            &workspace_config_json(&db, "__machine_provider_template_ownership__").unwrap(),
+        )
+        .unwrap();
+        assert!(ownership["epfl-aiaas"].is_string());
+        let model: serde_json::Value =
+            serde_json::from_str(&default_model_json(&db, &expected_id).unwrap()).unwrap();
+        assert_eq!(model["providerID"], "epfl-aiaas");
+        assert_eq!(model["modelID"], "large");
+
+        let workspace_config: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(folder.join("opencode.jsonc")).unwrap())
+                .unwrap();
+        assert_eq!(
+            workspace_config["provider"]["epfl-aiaas"]["npm"],
+            "@ai-sdk/openai-compatible"
+        );
+        assert_eq!(
+            workspace_config["provider"]["epfl-aiaas"]["options"]["apiKey"],
+            "{env:EPFL_AIAAS_API_KEY}"
+        );
+
+        let again = configure_openwork_in(
+            &config_dir,
+            &user_data,
+            &home,
+            "test-token",
+            1_700_000_000_001,
+        )
+        .unwrap();
+        assert!(!again.provider_written);
+        assert!(!again.env_written);
+        assert!(!again.workspace_config_written);
+        assert!(!again.default_model_written);
+        assert_eq!(
+            again.default_model_workspace_id.as_deref(),
+            Some(expected_id.as_str())
+        );
+    }
+
+    #[test]
+    fn configures_the_workspace_from_an_existing_state_file() {
+        let config_dir = configure_dir("state-config");
+        let user_data = configure_dir("state-user-data");
+        let home = configure_dir("state-home");
+        let workspace_dir = configure_dir("state-workspace");
+        std::fs::create_dir_all(&user_data).unwrap();
+        std::fs::write(
+            user_data.join("openwork-workspaces.json"),
+            state_with_workspace("ws_05771fd9f545", &workspace_dir),
+        )
+        .unwrap();
+
+        let outcome =
+            configure_openwork_in(&config_dir, &user_data, &home, "test-token", 1).unwrap();
+        assert!(outcome.default_model_written);
+        assert!(outcome.workspace_config_written);
+        assert_eq!(
+            outcome.default_model_workspace_id.as_deref(),
+            Some("ws_05771fd9f545")
+        );
+        assert!(!default_workspace_dir(&home).exists());
+        assert!(
+            default_model_json(&config_dir.join("runtime.sqlite"), "ws_05771fd9f545").is_some()
+        );
+        assert!(workspace_dir.join("opencode.jsonc").is_file());
+    }
+
+    #[test]
+    fn upserts_without_clobbering_existing_rows() {
+        let config_dir = configure_dir("upsert-config");
+        let user_data = configure_dir("upsert-user-data");
+        let home = configure_dir("upsert-home");
+        let workspace_dir = configure_dir("upsert-workspace");
+        std::fs::create_dir_all(&user_data).unwrap();
+        std::fs::write(
+            user_data.join("openwork-workspaces.json"),
+            state_with_workspace("ws_05771fd9f545", &workspace_dir),
+        )
+        .unwrap();
+        std::fs::create_dir_all(&config_dir).unwrap();
+        seeded_db(&config_dir.join("runtime.sqlite"));
+        std::fs::write(
+            config_dir.join("env.json"),
+            r#"{"schemaVersion": 1, "updatedAt": 1, "variables": [{"key": "MINE", "value": "keep", "updatedAt": 1}]}"#,
+        )
+        .unwrap();
+
+        let outcome =
+            configure_openwork_in(&config_dir, &user_data, &home, "test-token", 2).unwrap();
+        assert!(outcome.provider_written);
+        assert!(outcome.env_written);
+        assert!(outcome.workspace_config_written);
+        assert!(outcome.default_model_written);
+
+        let db = config_dir.join("runtime.sqlite");
+        let runtime: serde_json::Value =
+            serde_json::from_str(&runtime_config_json(&db, "__openwork_engine_global__").unwrap())
+                .unwrap();
+        assert_eq!(
+            runtime["provider"]["openwork-free"]["name"],
+            "OpenWork Models (Free)"
+        );
+        assert_eq!(
+            runtime["disabled_providers"],
+            serde_json::json!(["opencode"])
+        );
+        assert!(runtime["provider"]["epfl-aiaas"].is_object());
+        let other = default_model_json(&db, "ws_other").unwrap();
+        assert_eq!(other, r#"{"providerID":"other","modelID":"model"}"#);
+        let env: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(config_dir.join("env.json")).unwrap())
+                .unwrap();
+        let variables = env["variables"].as_array().unwrap();
+        assert!(variables
+            .iter()
+            .any(|entry| entry["key"] == "MINE" && entry["value"] == "keep"));
+        assert!(variables
+            .iter()
+            .any(|entry| entry["key"] == OPENWORK_ENV_KEY));
+
+        let again = configure_openwork_in(&config_dir, &user_data, &home, "test-token", 3).unwrap();
+        assert!(!again.provider_written);
+        assert!(!again.env_written);
+        assert!(!again.workspace_config_written);
+        assert!(!again.default_model_written);
+    }
+
+    #[test]
+    fn leaves_a_jsonc_workspace_config_with_comments_alone() {
+        let config_dir = configure_dir("jsonc-config");
+        let user_data = configure_dir("jsonc-user-data");
+        let home = configure_dir("jsonc-home");
+        let workspace_dir = configure_dir("jsonc-workspace");
+        std::fs::create_dir_all(&user_data).unwrap();
+        std::fs::write(
+            user_data.join("openwork-workspaces.json"),
+            state_with_workspace("ws_05771fd9f545", &workspace_dir),
+        )
+        .unwrap();
+        let original =
+            "// hand written\n{\n  \"provider\": {\"openwork-free\": {\"name\": \"kept\"}}\n}\n";
+        std::fs::write(workspace_dir.join("opencode.jsonc"), original).unwrap();
+
+        let outcome =
+            configure_openwork_in(&config_dir, &user_data, &home, "test-token", 1).unwrap();
+        assert!(outcome.provider_written);
+        assert!(!outcome.workspace_config_written);
+        assert_eq!(
+            std::fs::read_to_string(workspace_dir.join("opencode.jsonc")).unwrap(),
+            original
+        );
+    }
+
+    #[test]
+    fn skips_the_workspace_config_for_a_remote_workspace() {
+        let config_dir = configure_dir("remote-config");
+        let user_data = configure_dir("remote-user-data");
+        let home = configure_dir("remote-home");
+        std::fs::create_dir_all(&user_data).unwrap();
+        std::fs::write(
+            user_data.join("openwork-workspaces.json"),
+            r#"{"selectedId": "ws_remote", "workspaces": [{"id": "ws_remote", "path": "/home/tester/remote", "workspaceType": "remote"}]}"#,
+        )
+        .unwrap();
+
+        let outcome =
+            configure_openwork_in(&config_dir, &user_data, &home, "test-token", 1).unwrap();
+        assert!(outcome.default_model_written);
+        assert_eq!(
+            outcome.default_model_workspace_id.as_deref(),
+            Some("ws_remote")
+        );
+        assert!(!outcome.workspace_config_written);
+        assert!(!default_workspace_dir(&home).exists());
+        assert!(!Path::new("/home/tester/remote").exists());
+    }
+
+    #[test]
+    fn skips_the_default_model_when_no_workspace_is_listed() {
+        let config_dir = configure_dir("empty-state-config");
+        let user_data = configure_dir("empty-state-user-data");
+        let home = configure_dir("empty-state-home");
+        std::fs::create_dir_all(&user_data).unwrap();
+        std::fs::write(
+            user_data.join("openwork-workspaces.json"),
+            r#"{"selectedId": null, "workspaces": []}"#,
+        )
+        .unwrap();
+
+        let outcome =
+            configure_openwork_in(&config_dir, &user_data, &home, "test-token", 1).unwrap();
+        assert!(outcome.provider_written);
+        assert!(outcome.env_written);
+        assert_eq!(outcome.default_model_workspace_id, None);
+        assert!(!outcome.default_model_written);
+        assert!(!default_workspace_dir(&home).exists());
+    }
+
+    #[test]
+    fn skips_the_default_model_when_the_state_file_is_corrupt() {
+        let config_dir = configure_dir("corrupt-state-config");
+        let user_data = configure_dir("corrupt-state-user-data");
+        let home = configure_dir("corrupt-state-home");
+        std::fs::create_dir_all(&user_data).unwrap();
+        std::fs::write(user_data.join("openwork-workspaces.json"), "not json").unwrap();
+
+        let outcome =
+            configure_openwork_in(&config_dir, &user_data, &home, "test-token", 1).unwrap();
+        assert!(outcome.provider_written);
+        assert_eq!(outcome.default_model_workspace_id, None);
+    }
+
+    #[test]
+    fn fails_when_the_env_store_is_corrupt() {
+        let config_dir = configure_dir("corrupt-env-config");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        std::fs::write(config_dir.join("env.json"), "{oops").unwrap();
+
+        let error = configure_openwork_in(
+            &config_dir,
+            &configure_dir("corrupt-env-user-data"),
+            &configure_dir("corrupt-env-home"),
+            "test-token",
+            1,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, "parse");
+        assert!(error.message.contains("env.json"));
+    }
+
+    #[test]
+    fn fails_when_the_runtime_row_is_corrupt() {
+        let config_dir = configure_dir("corrupt-row-config");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        seeded_db(&config_dir.join("runtime.sqlite"));
+        {
+            let conn = rusqlite::Connection::open(config_dir.join("runtime.sqlite")).unwrap();
+            conn.execute(
+                "UPDATE runtime_opencode_configs SET config_json = 'not json' WHERE workspace_id = '__openwork_engine_global__'",
+                [],
+            )
+            .unwrap();
+        }
+
+        let error = configure_openwork_in(
+            &config_dir,
+            &configure_dir("corrupt-row-user-data"),
+            &configure_dir("corrupt-row-home"),
+            "test-token",
+            1,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, "parse");
+    }
+
+    #[test]
+    #[ignore = "sandbox probe for the real OpenWork code: OW_VERIFY_SANDBOX=<home> cargo test -- --ignored"]
+    fn configures_a_sandbox_home_for_real_app_verification() {
+        let home = PathBuf::from(
+            std::env::var_os("OW_VERIFY_SANDBOX")
+                .expect("set OW_VERIFY_SANDBOX to the sandbox home")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        let config_dir = unix_openwork_config_dir(None, &home);
+        let user_data = home.join(".config").join(OPENWORK_USER_DATA_DIR);
+        let outcome =
+            configure_openwork_in(&config_dir, &user_data, &home, "rcp-verify-token", now_ms())
+                .unwrap();
+        println!("{outcome:?}");
+    }
+
+    #[test]
+    fn configures_a_home_without_any_openwork_state() {
+        let home = configure_dir("virgin-home");
+        let config_dir = unix_openwork_config_dir(None, &home);
+        let user_data = home.join(".config").join(OPENWORK_USER_DATA_DIR);
+
+        let outcome =
+            configure_openwork_in(&config_dir, &user_data, &home, "test-token", 1).unwrap();
+        assert!(outcome.env_written);
+        assert!(outcome.provider_written);
+        assert!(outcome.workspace_config_written);
+        assert!(outcome.default_model_written);
+        assert!(config_dir.join("env.json").is_file());
+        assert!(config_dir.join("runtime.sqlite").is_file());
+    }
+
+    #[test]
+    fn fails_without_a_key() {
+        let error = configure_openwork_in(
+            &configure_dir("no-key-config"),
+            &configure_dir("no-key-user-data"),
+            &configure_dir("no-key-home"),
+            "  ",
+            1,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, "missing-key");
     }
 }

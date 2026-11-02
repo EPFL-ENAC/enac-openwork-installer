@@ -5,6 +5,7 @@ const ipc = vi.hoisted(() => ({
   installOpencode: vi.fn(),
   openworkStatus: vi.fn(),
   installOpenwork: vi.fn(),
+  configureOpenwork: vi.fn(),
   openworkStateStatus: vi.fn(),
   smokeTest: vi.fn(),
   onBackendLog: vi.fn(),
@@ -65,6 +66,14 @@ beforeEach(() => {
   noBackendLog()
   noPortalEvent()
   ipc.openworkStateStatus.mockResolvedValue({ broken: false, databases: [] })
+  ipc.configureOpenwork.mockResolvedValue({
+    configDir: '~/.config/openwork',
+    providerWritten: true,
+    envWritten: true,
+    workspaceConfigWritten: true,
+    defaultModelWorkspaceId: 'ws_05771fd9f545',
+    defaultModelWritten: true,
+  })
   ipc.opencodeStatus.mockResolvedValue({ installed: true, version: '1.2.3', path: '/usr/bin/opencode' })
   ipc.smokeTest.mockResolvedValue({ ok: true, detail: 'pong', error: null })
   ipc.portalClose.mockResolvedValue(undefined)
@@ -192,17 +201,57 @@ describe('merged opencode runner', () => {
 })
 
 describe('openwork runner', () => {
-  it('skips an installed OpenWork', async () => {
+  it('configures the provider after a skipped install and reports the config dir', async () => {
     ipc.openworkStatus.mockResolvedValue({ installed: true, version: '1.2.3', path: '/usr/bin/openwork' })
 
-    const { outcome, lines } = await run(runners(), 'openwork')
+    const { outcome, lines } = await run(runners({ results: withKey }), 'openwork')
+
+    expect(ipc.installOpenwork).not.toHaveBeenCalled()
+    expect(ipc.configureOpenwork).toHaveBeenCalledWith(TOKEN)
+    expect(outcome).toEqual({
+      status: 'passed',
+      result: { version: '1.2.3', path: '/usr/bin/openwork', configDir: '~/.config/openwork' },
+    })
+    const text = lines.join('\n')
+    expect(text).toContain('already installed')
+    expect(text).toContain('The epfl-aiaas provider is written into the OpenWork configuration')
+    expect(text).toContain('stored in the OpenWork environment store')
+    expect(text).toContain('The default model is set to epfl-aiaas/large')
+    expect(text).not.toContain(TOKEN)
+  })
+
+  it('configures after a fresh install', async () => {
+    ipc.openworkStatus.mockResolvedValue({ installed: false, version: null, path: null })
+    ipc.installOpenwork.mockResolvedValue({ version: '0.18.63', path: '/opt/openwork' })
+
+    const { outcome, lines } = await run(runners({ results: withKey }), 'openwork')
+
+    expect(ipc.installOpenwork).toHaveBeenCalled()
+    expect(ipc.configureOpenwork).toHaveBeenCalledWith(TOKEN)
+    expect(outcome).toEqual({
+      status: 'passed',
+      result: { version: '0.18.63', path: '/opt/openwork', configDir: '~/.config/openwork' },
+    })
+    expect(lines.join('\n')).toContain('OpenWork 0.18.63 is installed')
+  })
+
+  it('fails the step when the configuration fails', async () => {
+    ipc.configureOpenwork.mockRejectedValue({ kind: 'io', message: 'env store locked' })
+
+    const { outcome, lines } = await run(runners({ results: withKey }), 'openwork')
+
+    expect(outcome).toEqual({ status: 'failed', error: { kind: 'io', message: 'env store locked' } })
+    expect(lines.join('\n')).toContain('The OpenWork configuration failed')
+  })
+
+  it('fails without a key from the previous step', async () => {
+    const { outcome } = await run(runners(), 'openwork')
 
     expect(outcome).toEqual({
-      status: 'skipped',
-      result: { version: '1.2.3', path: '/usr/bin/openwork' },
+      status: 'failed',
+      error: { kind: 'missing-key', message: expect.any(String) },
     })
-    expect(ipc.installOpenwork).not.toHaveBeenCalled()
-    expect(lines.join('\n')).toContain('already installed')
+    expect(ipc.configureOpenwork).not.toHaveBeenCalled()
   })
 
   it('fails with the backend error kind when the status call fails', async () => {

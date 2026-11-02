@@ -5,6 +5,7 @@ import { DEFAULT_KEY_NAME, chooseKeyBranch, type KeyChoice } from './key-choice'
 import {
   installOpencode,
   installOpenwork,
+  configureOpenwork,
   onBackendLog,
   onPortalLogin,
   opencodeStatus,
@@ -42,6 +43,9 @@ export interface RunnerBridge {
   results: () => FlowResults
   askKeys: (prompt: KeyPrompt) => Promise<KeyAnswer>
 }
+
+/** The provider id inside OpenWork (the OpenCode config uses epfl-rcp-aiaas). */
+const OPENWORK_PROVIDER_ID = 'epfl-aiaas'
 
 const toAppError = (cause: unknown): AppError => {
   const failure = cause as Partial<AppError> | null
@@ -308,7 +312,47 @@ const openworkRun = async (
   } catch {
     // A state probe that does not answer must not block the installation.
   }
-  return toolRun('openwork', 'OpenWork', openworkStatus, installOpenwork, emit)
+
+  const install = await toolRun('openwork', 'OpenWork', openworkStatus, installOpenwork, emit)
+  if (install.status === 'failed') return install
+
+  const token = bridge.results().rcpKey?.token
+  if (!token) {
+    emit('No RCP key is available')
+    return failed({
+      kind: 'missing-key',
+      message: 'No RCP key is available from the previous step.',
+    })
+  }
+
+  emit('Configuring OpenWork to use the RCP provider')
+  try {
+    const outcome = await configureOpenwork(token)
+    emit(
+      outcome.providerWritten
+        ? `The ${OPENWORK_PROVIDER_ID} provider is written into the OpenWork configuration`
+        : `The ${OPENWORK_PROVIDER_ID} provider is already configured in OpenWork`,
+    )
+    emit(
+      outcome.envWritten
+        ? 'The RCP key is stored in the OpenWork environment store'
+        : 'The RCP key is already stored in the OpenWork environment store',
+    )
+    emit(
+      outcome.workspaceConfigWritten
+        ? `The workspace opencode.jsonc includes the ${OPENWORK_PROVIDER_ID} provider`
+        : 'The workspace opencode.jsonc already includes the provider or is not plain JSON',
+    )
+    emit(
+      outcome.defaultModelWritten
+        ? `The default model is set to ${OPENWORK_PROVIDER_ID}/large`
+        : `The default model ${OPENWORK_PROVIDER_ID}/large is already set`,
+    )
+    return passed({ ...install.result, configDir: outcome.configDir })
+  } catch (cause) {
+    emit('The OpenWork configuration failed')
+    return failed(toAppError(cause))
+  }
 }
 
 export const createRunners = (bridge: RunnerBridge): StepRun[] => {
