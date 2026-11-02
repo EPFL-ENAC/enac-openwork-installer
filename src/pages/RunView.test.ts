@@ -112,11 +112,11 @@ const styleBlock = (css: string, selector: string): string => {
 }
 
 describe('RunView progress colours', () => {
-  it('fills the done segments red over a light grey track', async () => {
+  it('renders the whole bar solid red at every step', async () => {
     const css = await source()
 
-    expect(styleBlock(css, '.run-progress-seg.is-done')).toContain('var(--epfl-red)')
-    expect(styleBlock(css, '.run-progress-seg {')).toContain('var(--border-subtle)')
+    expect(styleBlock(css, '.run-progress {')).toContain('var(--epfl-red)')
+    expect(css).not.toContain('var(--border-subtle)')
   })
 })
 

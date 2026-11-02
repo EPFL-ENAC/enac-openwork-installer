@@ -141,7 +141,7 @@ const detailOf = (id: StepId): string | undefined => {
   color: var(--fg-muted);
 }
 
-/* The one designed element: one tick per real step, filled as it lands. */
+/* The one designed element: one solid red bar under the title. */
 .run-progress {
   display: flex;
   gap: 2px;
@@ -149,16 +149,11 @@ const detailOf = (id: StepId): string | undefined => {
   margin-top: var(--space-2);
   border-radius: var(--radius);
   overflow: hidden;
+  background: var(--epfl-red);
 }
 
 .run-progress-seg {
   flex: 1;
-  background: var(--border-subtle);
-  transition: background var(--t-base);
-}
-
-.run-progress-seg.is-done {
-  background: var(--epfl-red);
 }
 
 .run-trace {
