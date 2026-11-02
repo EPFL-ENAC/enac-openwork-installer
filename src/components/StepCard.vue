@@ -95,7 +95,12 @@ const errorText = computed(() => {
 }
 
 .step-card-running {
-  border-left-color: var(--border-strong);
+  border-left-width: 2px;
+  border-left-color: var(--epfl-red);
+}
+
+.step-card-running .card-title {
+  color: var(--epfl-red);
 }
 
 .step-card-passed {
@@ -136,7 +141,7 @@ const errorText = computed(() => {
 .step-spin {
   width: 0.75rem;
   height: 0.75rem;
-  border: 2px solid var(--fg-subtle);
+  border: 2px solid var(--epfl-red);
   border-top-color: transparent;
   border-radius: var(--radius-pill);
   animation: step-turn 0.9s linear infinite;
@@ -159,7 +164,7 @@ const errorText = computed(() => {
 @media (prefers-reduced-motion: reduce) {
   .step-spin {
     animation: none;
-    border-top-color: var(--fg-subtle);
+    border-top-color: var(--epfl-red);
   }
 }
 

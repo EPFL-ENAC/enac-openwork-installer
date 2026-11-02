@@ -145,6 +145,15 @@ describe('StepCard status palette', () => {
     expect(await render('')).not.toContain('card-status-check')
   })
 
+  it('accents the running card in the primary red', async () => {
+    const css = await source()
+
+    expect(styleBlock(css, '.step-card-running')).toContain('var(--epfl-red)')
+    expect(styleBlock(css, '.step-card-running')).toContain('border-left-width: 2px')
+    expect(styleBlock(css, '.step-card-running .card-title')).toContain('var(--epfl-red)')
+    expect(styleBlock(css, '.step-spin')).toContain('var(--epfl-red)')
+  })
+
   it('paints pass grey and fail red, with no other status colour', async () => {
     const css = await source()
 

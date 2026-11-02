@@ -158,7 +158,7 @@ const detailOf = (id: StepId): string | undefined => {
 }
 
 .run-progress-seg.is-done {
-  background: var(--fg);
+  background: var(--epfl-red);
 }
 
 .run-trace {

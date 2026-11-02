@@ -97,6 +97,29 @@ describe('RunView progress bar', () => {
   })
 })
 
+const source = async (): Promise<string> => {
+  const specifier = 'node:fs'
+  const fs = (await import(/* @vite-ignore */ specifier)) as {
+    readFileSync: (url: URL, encoding: 'utf8') => string
+  }
+  return fs.readFileSync(new URL('./RunView.vue', import.meta.url), 'utf8')
+}
+
+const styleBlock = (css: string, selector: string): string => {
+  const start = css.indexOf(selector)
+  expect(start, `${selector} is styled`).toBeGreaterThan(-1)
+  return css.slice(start, css.indexOf('}', start))
+}
+
+describe('RunView progress colours', () => {
+  it('fills the done segments red over a light grey track', async () => {
+    const css = await source()
+
+    expect(styleBlock(css, '.run-progress-seg.is-done')).toContain('var(--epfl-red)')
+    expect(styleBlock(css, '.run-progress-seg {')).toContain('var(--border-subtle)')
+  })
+})
+
 describe('RunView paused step', () => {
   it('shows the waiting mark while the rcpKey step waits on the user', async () => {
     trace.reset()
