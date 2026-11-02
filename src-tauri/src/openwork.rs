@@ -706,6 +706,8 @@ const ENV_STORE_FILE: &str = "env.json";
 const RUNTIME_DB_FILE: &str = "runtime.sqlite";
 const WORKSPACE_STATE_FILE: &str = "openwork-workspaces.json";
 const WORKSPACE_CONFIG_FILE: &str = "opencode.jsonc";
+const ANALYTICS_STORE_FILE: &str = "free-auto-analytics";
+const ANALYTICS_JOURNEY_FILE: &str = "free-auto-journey";
 
 /// What one configure run changed, for the trace and the step result.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -714,6 +716,7 @@ pub struct OpenworkConfigureOutcome {
     pub config_dir: String,
     pub provider_written: bool,
     pub env_written: bool,
+    pub analytics_written: bool,
     pub workspace_config_written: bool,
     pub default_model_workspace_id: Option<String>,
     pub default_model_written: bool,
@@ -1281,6 +1284,7 @@ pub fn configure_openwork_in(
         config_dir: config_dir.display().to_string(),
         provider_written: false,
         env_written: false,
+        analytics_written: false,
         workspace_config_written: false,
         default_model_workspace_id: None,
         default_model_written: false,
@@ -1312,6 +1316,7 @@ pub fn configure_openwork_in(
         write_env_store(&env_path, &store)?;
     }
     outcome.env_written = env_changed;
+    outcome.analytics_written = disable_telemetry(config_dir)?;
 
     let db_path = config_dir.join(RUNTIME_DB_FILE);
     let fingerprint = provider_fingerprint(&provider_definition());
@@ -1383,6 +1388,48 @@ pub fn configure_openwork_in(
     outcome.provider_written = runtime_changed || ownership_changed;
     outcome.default_model_written = model_changed;
     Ok(outcome)
+}
+
+/// OpenWork reads this file when its server starts. The journey id makes the
+/// anonymous events linkable, so turning the switch off also drops it.
+fn disable_telemetry(config_dir: &Path) -> Result<bool, AppError> {
+    std::fs::create_dir_all(config_dir)
+        .map_err(|e| AppError::io(format!("cannot create {}: {e}", config_dir.display())))?;
+    let store = config_dir.join(ANALYTICS_STORE_FILE);
+    let current = match std::fs::read_to_string(&store) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => {
+            return Err(AppError::io(format!(
+                "cannot read {}: {error}",
+                store.display()
+            )))
+        }
+    };
+    let mut changed = false;
+    if current.trim() != "disabled" {
+        std::fs::write(&store, "disabled")
+            .map_err(|e| AppError::io(format!("cannot write {}: {e}", store.display())))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&store, std::fs::Permissions::from_mode(0o600))
+                .map_err(|e| AppError::io(format!("cannot restrict {}: {e}", store.display())))?;
+        }
+        changed = true;
+    }
+    let journey = config_dir.join(ANALYTICS_JOURNEY_FILE);
+    match std::fs::remove_file(&journey) {
+        Ok(()) => changed = true,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(AppError::io(format!(
+                "cannot remove {}: {error}",
+                journey.display()
+            )))
+        }
+    }
+    Ok(changed)
 }
 
 fn parse_json_object(text: &str, label: &str) -> Result<serde_json::Value, AppError> {
@@ -2317,8 +2364,13 @@ mod tests {
         .unwrap();
         assert!(outcome.provider_written);
         assert!(outcome.env_written);
+        assert!(outcome.analytics_written);
         assert!(!outcome.workspace_config_written);
         assert!(outcome.default_model_written);
+        assert_eq!(
+            std::fs::read_to_string(config_dir.join(ANALYTICS_STORE_FILE)).unwrap(),
+            "disabled"
+        );
 
         let folder = default_workspace_dir(&home);
         assert!(folder.is_dir());
@@ -2397,12 +2449,43 @@ mod tests {
         .unwrap();
         assert!(!again.provider_written);
         assert!(!again.env_written);
+        assert!(!again.analytics_written);
         assert!(!again.workspace_config_written);
         assert!(!again.default_model_written);
         assert_eq!(
             again.default_model_workspace_id.as_deref(),
             Some(expected_id.as_str())
         );
+    }
+
+    #[test]
+    fn replaces_an_enabled_analytics_store_and_drops_the_journey() {
+        let config_dir = configure_dir("telemetry-config");
+        let user_data = configure_dir("telemetry-user-data");
+        let home = configure_dir("telemetry-home");
+        std::fs::write(config_dir.join(ANALYTICS_STORE_FILE), "enabled\n").unwrap();
+        std::fs::write(config_dir.join(ANALYTICS_JOURNEY_FILE), "journey-123").unwrap();
+
+        let outcome =
+            configure_openwork_in(&config_dir, &user_data, &home, "test-token", 1).unwrap();
+        assert!(outcome.analytics_written);
+        assert_eq!(
+            std::fs::read_to_string(config_dir.join(ANALYTICS_STORE_FILE)).unwrap(),
+            "disabled"
+        );
+        assert!(!config_dir.join(ANALYTICS_JOURNEY_FILE).exists());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let mode = std::fs::metadata(config_dir.join(ANALYTICS_STORE_FILE))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+
+        let again = configure_openwork_in(&config_dir, &user_data, &home, "test-token", 2).unwrap();
+        assert!(!again.analytics_written);
     }
 
     #[test]

@@ -70,6 +70,7 @@ beforeEach(() => {
     configDir: '~/.config/openwork',
     providerWritten: true,
     envWritten: true,
+    analyticsWritten: true,
     workspaceConfigWritten: true,
     defaultModelWorkspaceId: 'ws_05771fd9f545',
     defaultModelWritten: true,
@@ -216,6 +217,7 @@ describe('openwork runner', () => {
     expect(text).toContain('already installed')
     expect(text).toContain('The epfl-aiaas provider is written into the OpenWork configuration')
     expect(text).toContain('stored in the OpenWork environment store')
+    expect(text).toContain('The OpenWork anonymous usage data is turned off')
     expect(text).toContain('The default model is set to epfl-aiaas/large')
     expect(text).not.toContain(TOKEN)
   })

@@ -339,6 +339,11 @@ const openworkRun = async (
         : 'The RCP key is already stored in the OpenWork environment store',
     )
     emit(
+      outcome.analyticsWritten
+        ? 'The OpenWork anonymous usage data is turned off'
+        : 'The OpenWork anonymous usage data is already off',
+    )
+    emit(
       outcome.workspaceConfigWritten
         ? `The stale ${OPENWORK_PROVIDER_ID} provider is removed from the workspace opencode.jsonc`
         : `The workspace opencode.jsonc carries no ${OPENWORK_PROVIDER_ID} provider override`,

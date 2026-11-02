@@ -47,6 +47,7 @@ export interface ConfigureOpenworkOutcome {
   configDir: string
   providerWritten: boolean
   envWritten: boolean
+  analyticsWritten: boolean
   workspaceConfigWritten: boolean
   defaultModelWorkspaceId: string | null
   defaultModelWritten: boolean
