@@ -24,6 +24,11 @@
       "openworkBroken": "La base de données d'OpenWork bloque le démarrage. Sauvegardez-la et videz-la, puis relancez l'étape."
     }
   },
+  "progress": {
+    "barLabel": "Progression de l'installation",
+    "step": "Étape {current} sur {total}",
+    "waiting": "En attente de votre action"
+  },
   "rcpKey": {
     "login": {
       "waiting": "Une fenêtre du portail est ouverte. Connectez-vous avec votre compte EPFL. L'installation continue dès que vous êtes connecté."

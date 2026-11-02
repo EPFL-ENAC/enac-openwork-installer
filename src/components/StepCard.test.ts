@@ -16,20 +16,25 @@ const store = vi.hoisted(() => ({
 vi.mock('../stores/flow', () => ({ useFlow: () => store }))
 
 import StepCard from './StepCard.vue'
-import { registerSecret } from '../lib/trace'
+import { registerSecret, trace } from '../lib/trace'
 
 const SHORT_TOKEN = 'k9z'
 
-const render = (detail: string, id: 'opencode' | 'openwork' = 'opencode'): Promise<string> => {
-  const app = createSSRApp({ render: () => h(StepCard, { id, detail }) })
+const render = (
+  detail: string,
+  id: 'opencode' | 'openwork' | 'rcpKey' = 'opencode',
+  paused = false,
+): Promise<string> => {
+  const app = createSSRApp({ render: () => h(StepCard, { id, detail, paused }) })
   app.use(
     createI18n({
       legacy: false,
       locale: 'en',
       messages: {
         en: {
-          stepTitles: { opencode: 'OpenCode', openwork: 'OpenWork' },
-          trace: { status: {} },
+          stepTitles: { opencode: 'OpenCode', openwork: 'OpenWork', rcpKey: 'RCP key' },
+          trace: { status: { pending: 'Pending', running: 'Running' } },
+          progress: { waiting: 'Waiting for you' },
           run: { error: { generic: 'Something went wrong: {message}' } },
         },
       },
@@ -52,6 +57,63 @@ describe('StepCard detail', () => {
 
   it('keeps a detail without a token readable', async () => {
     expect(await render('OpenCode 1.2.3')).toContain('OpenCode 1.2.3')
+  })
+})
+
+describe('StepCard activity mark', () => {
+  it('shows the spinner and aria-busy on the active card', async () => {
+    trace.reset()
+    trace.setStepStatus('opencode', 'running')
+
+    const markup = await render('')
+
+    expect(markup).toContain('step-spin')
+    expect(markup).toContain('aria-busy="true"')
+  })
+
+  it('keeps a pending card static', async () => {
+    trace.reset()
+
+    const markup = await render('')
+
+    expect(markup).not.toContain('step-spin')
+    expect(markup).not.toContain('aria-busy')
+  })
+
+  it('keeps a passed card static', async () => {
+    trace.reset()
+    trace.setStepStatus('opencode', 'passed')
+
+    const markup = await render('')
+
+    expect(markup).not.toContain('step-spin')
+    expect(markup).not.toContain('aria-busy')
+  })
+
+  it('stops the spinner and shows the waiting mark while paused', async () => {
+    trace.reset()
+    trace.setStepStatus('rcpKey', 'running')
+
+    const markup = await render('', 'rcpKey', true)
+
+    expect(markup).not.toContain('step-spin')
+    expect(markup).toContain('step-mark-paused')
+    expect(markup).toContain('Waiting for you')
+    expect(markup).not.toContain('aria-busy')
+  })
+
+  it('holds a static spinner under reduced motion', async () => {
+    const specifier = 'node:fs'
+    const fs = (await import(/* @vite-ignore */ specifier)) as {
+      readFileSync: (url: URL, encoding: 'utf8') => string
+    }
+    const source = fs.readFileSync(new URL('./StepCard.vue', import.meta.url), 'utf8')
+    const start = source.indexOf('prefers-reduced-motion')
+    const block = source.slice(start, source.indexOf('}', start) + 1)
+
+    expect(start).toBeGreaterThan(-1)
+    expect(block).toContain('.step-spin')
+    expect(block).toContain('animation: none')
   })
 })
 

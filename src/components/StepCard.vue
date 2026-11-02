@@ -6,12 +6,14 @@ import type { StepId } from '../lib/flow'
 import { maskSecrets, trace } from '../lib/trace'
 import { useFlow } from '../stores/flow'
 
-const props = defineProps<{ id: StepId; detail?: string }>()
+const props = defineProps<{ id: StepId; detail?: string; paused?: boolean }>()
 
 const { t } = useI18n()
 const { results, state, failedStep, retry } = useFlow()
 
 const status = computed(() => trace.stepStatuses[props.id])
+const active = computed(() => status.value === 'running')
+const busy = computed(() => active.value && !props.paused)
 const failedHere = computed(() => failedStep.value === props.id)
 const safeDetail = computed(() => (props.detail ? maskSecrets(props.detail) : ''))
 
@@ -31,13 +33,24 @@ const errorText = computed(() => {
 </script>
 
 <template>
-  <section :class="['step-card', `step-card-${status}`]">
+  <section :class="['step-card', `step-card-${status}`]" :aria-busy="busy ? 'true' : undefined">
     <header class="card-head">
-      <h2 class="card-title">{{ t(`stepTitles.${id}`) }}</h2>
+      <h2 class="card-title">
+        <span
+          v-if="active"
+          :class="['step-mark', paused ? 'step-mark-paused' : 'step-spin']"
+          aria-hidden="true"
+        />
+        {{ t(`stepTitles.${id}`) }}
+      </h2>
       <span :class="['card-status', `card-status-${status}`]">
         {{ t(`trace.status.${status}`) }}
       </span>
     </header>
+
+    <p v-if="active && paused" class="card-waiting" role="status">
+      {{ t('progress.waiting') }}
+    </p>
 
     <p v-if="safeDetail" class="card-detail">{{ safeDetail }}</p>
 
@@ -94,8 +107,51 @@ const errorText = computed(() => {
 }
 
 .card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   margin: 0;
   font-size: var(--fs-h5);
+}
+
+.step-mark {
+  flex: none;
+}
+
+.step-spin {
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 2px solid var(--primary);
+  border-top-color: transparent;
+  border-radius: var(--radius-pill);
+  animation: step-turn 0.9s linear infinite;
+}
+
+.step-mark-paused {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--warning-fg);
+}
+
+@keyframes step-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A stopped clock still tells the time: keep the ring, drop the turn. */
+@media (prefers-reduced-motion: reduce) {
+  .step-spin {
+    animation: none;
+    border-top-color: var(--primary);
+  }
+}
+
+.card-waiting {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--warning-fg);
 }
 
 .card-status {

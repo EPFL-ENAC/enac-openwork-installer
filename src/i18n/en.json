@@ -24,6 +24,11 @@
       "openworkBroken": "The OpenWork database blocks the start. Back it up and clear it, then retry the step."
     }
   },
+  "progress": {
+    "barLabel": "Installation progress",
+    "step": "Step {current} of {total}",
+    "waiting": "Waiting for you"
+  },
   "rcpKey": {
     "login": {
       "waiting": "A portal window is open. Log in with your EPFL account. The installation continues when you are logged in."
