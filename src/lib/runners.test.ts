@@ -28,6 +28,7 @@ import type { StepRun } from './orchestrator'
 import { createRunners, type KeyAnswer, type KeyPrompt, type RunnerBridge } from './runners'
 
 const TOKEN = 'rcp-token-0123456789'
+const CONFIG_PATH = '~/.config/opencode/opencode.json'
 
 const asker = (answer: KeyAnswer | ((prompt: KeyPrompt) => Promise<KeyAnswer>) = {}) =>
   vi.fn<(prompt: KeyPrompt) => Promise<KeyAnswer>>(async (prompt) =>
@@ -39,6 +40,8 @@ const bridge = (over: Partial<RunnerBridge> = {}): RunnerBridge => ({
   askKeys: vi.fn(async () => ({})),
   ...over,
 })
+
+const withKey = (): FlowResults => ({ rcpKey: { status: 'passed', token: TOKEN, keyName: 'OpenWork' } })
 
 const runners = (over: Partial<RunnerBridge> = {}): StepRun[] => createRunners(bridge(over))
 
@@ -62,26 +65,21 @@ beforeEach(() => {
   noBackendLog()
   noPortalEvent()
   ipc.openworkStateStatus.mockResolvedValue({ broken: false, databases: [] })
+  ipc.opencodeStatus.mockResolvedValue({ installed: true, version: '1.2.3', path: '/usr/bin/opencode' })
+  ipc.smokeTest.mockResolvedValue({ ok: true, detail: 'pong', error: null })
   ipc.portalClose.mockResolvedValue(undefined)
   provider.writeProviderConfig.mockResolvedValue({
     ok: true,
-    configPath: '~/.config/opencode/opencode.json',
-    backupPath: '~/.config/opencode/opencode.json.bak',
+    configPath: CONFIG_PATH,
+    backupPath: `${CONFIG_PATH}.bak`,
     changed: true,
     backupCreated: false,
   })
 })
 
 describe('runner order', () => {
-  it('runs the four auto steps between network and openwork', () => {
-    expect(runners().map((entry) => entry.id)).toEqual([
-      'network',
-      'opencode',
-      'rcpKey',
-      'providerConfig',
-      'smokeTest',
-      'openwork',
-    ])
+  it('runs the RCP key before the merged OpenCode step', () => {
+    expect(runners().map((entry) => entry.id)).toEqual(['network', 'rcpKey', 'opencode', 'openwork'])
   })
 })
 
@@ -112,21 +110,24 @@ describe('network runner', () => {
   })
 })
 
-describe('tool runners', () => {
-  it('skips an installed tool and logs a skip line', async () => {
-    ipc.opencodeStatus.mockResolvedValue({ installed: true, version: '1.2.3', path: '/usr/bin/opencode' })
+describe('merged opencode runner', () => {
+  it('skips the install sub-action, then writes the config and runs the smoke test', async () => {
+    const { outcome, lines } = await run(runners({ results: withKey }), 'opencode')
 
-    const { outcome, lines } = await run(runners(), 'opencode')
-
-    expect(outcome).toEqual({
-      status: 'skipped',
-      result: { version: '1.2.3', path: '/usr/bin/opencode' },
-    })
     expect(ipc.installOpencode).not.toHaveBeenCalled()
-    expect(lines.join('\n')).toContain('already installed')
+    expect(provider.writeProviderConfig).toHaveBeenCalledWith(TOKEN)
+    expect(ipc.smokeTest).toHaveBeenCalledWith(TOKEN)
+    expect(outcome.status).toBe('passed')
+    expect(outcome).toMatchObject({ result: { version: '1.2.3', path: CONFIG_PATH, ok: true } })
+
+    const text = lines.join('\n')
+    expect(text).toContain('already installed, skip')
+    expect(text).toContain(`The configuration is written to ${CONFIG_PATH}`)
+    expect(text).toContain('The smoke test passed')
+    expect(text).not.toContain(TOKEN)
   })
 
-  it('installs a missing tool and forwards only its backend-log lines', async () => {
+  it('installs a missing OpenCode and forwards only its backend-log lines', async () => {
     ipc.opencodeStatus.mockResolvedValue({ installed: false, version: null, path: null })
     ipc.onBackendLog.mockImplementation(async (handler: (log: { task: string; message: string }) => void) => {
       handler({ task: 'opencode', message: 'downloading' })
@@ -135,14 +136,73 @@ describe('tool runners', () => {
     })
     ipc.installOpencode.mockResolvedValue({ version: '1.2.3', path: '/usr/local/bin/opencode' })
 
-    const { outcome, lines } = await run(runners(), 'opencode')
+    const { outcome, lines } = await run(runners({ results: withKey }), 'opencode')
 
     expect(outcome).toEqual({
       status: 'passed',
-      result: { version: '1.2.3', path: '/usr/local/bin/opencode' },
+      result: { version: '1.2.3', path: CONFIG_PATH, ok: true, detail: 'pong' },
     })
     expect(lines).toContain('downloading')
     expect(lines).not.toContain('other task')
+    expect(lines.join('\n')).toContain('OpenCode 1.2.3 is installed')
+  })
+
+  it('stops before the config write when the install sub-action fails', async () => {
+    ipc.opencodeStatus.mockResolvedValue({ installed: false, version: null, path: null })
+    ipc.installOpencode.mockRejectedValue({ kind: 'install', message: 'no disk' })
+
+    const { outcome, lines } = await run(runners({ results: withKey }), 'opencode')
+
+    expect(outcome).toEqual({ status: 'failed', error: { kind: 'install', message: 'no disk' } })
+    expect(provider.writeProviderConfig).not.toHaveBeenCalled()
+    expect(ipc.smokeTest).not.toHaveBeenCalled()
+    expect(lines.join('\n')).toContain('OpenCode installation failed')
+  })
+
+  it('stops before the smoke test when the config write fails and names the sub-action', async () => {
+    provider.writeProviderConfig.mockResolvedValue({ ok: false, code: 'io', detail: 'disk full' })
+
+    const { outcome, lines } = await run(runners({ results: withKey }), 'opencode')
+
+    expect(outcome).toEqual({ status: 'failed', error: { kind: 'io', message: 'disk full' } })
+    expect(ipc.smokeTest).not.toHaveBeenCalled()
+    expect(lines.join('\n')).toContain('The OpenCode configuration was not written: disk full')
+  })
+
+  it('fails with the smoke error kind and names the sub-action', async () => {
+    ipc.smokeTest.mockResolvedValue({ ok: false, detail: null, error: 'HTTP 401' })
+
+    const { outcome, lines } = await run(runners({ results: withKey }), 'opencode')
+
+    expect(outcome).toEqual({ status: 'failed', error: { kind: 'smoke', message: 'HTTP 401' } })
+    expect(lines.join('\n')).toContain('The smoke test failed: HTTP 401')
+  })
+
+  it('fails without a key from the previous step', async () => {
+    const { outcome, lines } = await run(runners(), 'opencode')
+
+    expect(outcome).toEqual({
+      status: 'failed',
+      error: { kind: 'missing-key', message: expect.any(String) },
+    })
+    expect(provider.writeProviderConfig).not.toHaveBeenCalled()
+    expect(ipc.smokeTest).not.toHaveBeenCalled()
+    expect(lines.join('\n')).toContain('No RCP key is available')
+  })
+})
+
+describe('openwork runner', () => {
+  it('skips an installed OpenWork', async () => {
+    ipc.openworkStatus.mockResolvedValue({ installed: true, version: '1.2.3', path: '/usr/bin/openwork' })
+
+    const { outcome, lines } = await run(runners(), 'openwork')
+
+    expect(outcome).toEqual({
+      status: 'skipped',
+      result: { version: '1.2.3', path: '/usr/bin/openwork' },
+    })
+    expect(ipc.installOpenwork).not.toHaveBeenCalled()
+    expect(lines.join('\n')).toContain('already installed')
   })
 
   it('fails with the backend error kind when the status call fails', async () => {
@@ -164,58 +224,6 @@ describe('tool runners', () => {
     })
     expect(lines.join('\n')).toContain('opencode.db')
     expect(ipc.openworkStatus).not.toHaveBeenCalled()
-  })
-})
-
-describe('provider config runner', () => {
-  it('writes the config with the key from the rcpKey step', async () => {
-    const results = (): FlowResults => ({ rcpKey: { status: 'passed', token: TOKEN, keyName: 'OpenWork' } })
-
-    const { outcome, lines } = await run(runners({ results }), 'providerConfig')
-
-    expect(provider.writeProviderConfig).toHaveBeenCalledWith(TOKEN)
-    expect(outcome).toEqual({
-      status: 'passed',
-      result: { path: '~/.config/opencode/opencode.json' },
-    })
-    expect(lines.join('\n')).not.toContain(TOKEN)
-  })
-
-  it('fails when the writer reports an error', async () => {
-    const results = (): FlowResults => ({ rcpKey: { status: 'passed', token: TOKEN } })
-    provider.writeProviderConfig.mockResolvedValue({ ok: false, code: 'io', detail: 'disk full' })
-
-    const { outcome } = await run(runners({ results }), 'providerConfig')
-
-    expect(outcome).toEqual({ status: 'failed', error: { kind: 'io', message: 'disk full' } })
-  })
-
-  it('fails without a key from the previous step', async () => {
-    const { outcome } = await run(runners(), 'providerConfig')
-
-    expect(outcome).toEqual({
-      status: 'failed',
-      error: { kind: 'missing-key', message: expect.any(String) },
-    })
-    expect(provider.writeProviderConfig).not.toHaveBeenCalled()
-  })
-})
-
-describe('smoke test runner', () => {
-  it('passes when the smoke test succeeds', async () => {
-    ipc.smokeTest.mockResolvedValue({ ok: true, detail: 'pong', error: null })
-
-    const { outcome } = await run(runners(), 'smokeTest')
-
-    expect(outcome).toEqual({ status: 'passed', result: { ok: true, detail: 'pong' } })
-  })
-
-  it('fails with the smoke error kind when the smoke test reports an error', async () => {
-    ipc.smokeTest.mockResolvedValue({ ok: false, detail: null, error: 'HTTP 401' })
-
-    const { outcome } = await run(runners(), 'smokeTest')
-
-    expect(outcome).toEqual({ status: 'failed', error: { kind: 'smoke', message: 'HTTP 401' } })
   })
 })
 

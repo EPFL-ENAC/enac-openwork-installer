@@ -21,8 +21,6 @@
     "error": {
       "generic": "Something went wrong: {message}",
       "network": "The EPFL network is not reachable. If you are off campus, connect to the EPFL VPN.",
-      "smoke": "The smoke test failed: {detail}",
-      "provider": "The OpenCode configuration was not written: {detail}",
       "missingKey": "No RCP key is available from the previous step.",
       "openworkBroken": "The OpenWork database blocks the start. Back it up and clear it, then retry the step."
     }
@@ -56,6 +54,12 @@
       "step3": "Paste the token in the field below.",
       "pasteLabel": "Token",
       "paste": "Use this token"
+    }
+  },
+  "opencode": {
+    "error": {
+      "provider": "The OpenCode configuration was not written: {detail}",
+      "smoke": "The smoke test failed: {detail}"
     }
   },
   "network": {
@@ -116,8 +120,6 @@
     "network": "Network check",
     "opencode": "OpenCode",
     "rcpKey": "RCP key",
-    "providerConfig": "Provider configuration",
-    "smokeTest": "Smoke test",
     "openwork": "OpenWork",
     "summary": "Summary"
   }

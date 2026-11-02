@@ -12,12 +12,12 @@ import { registerSecret } from '../lib/trace'
 const SHORT_TOKEN = 'k9z'
 
 const render = (detail: string): Promise<string> => {
-  const app = createSSRApp({ render: () => h(StepCard, { id: 'smokeTest', detail }) })
+  const app = createSSRApp({ render: () => h(StepCard, { id: 'opencode', detail }) })
   app.use(
     createI18n({
       legacy: false,
       locale: 'en',
-      messages: { en: { stepTitles: { smokeTest: 'Smoke test' }, trace: { status: {} } } },
+      messages: { en: { stepTitles: { opencode: 'OpenCode' }, trace: { status: {} } } },
       missingWarn: false,
       fallbackWarn: false,
     }),

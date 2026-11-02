@@ -81,13 +81,13 @@ Run this checklist on the EPFL network or VPN, on a Windows x64 machine, on a ma
 
 ### Fresh RCP key
 
-- [ ] Start the app and confirm the eight steps appear in order. A later step stays locked until the previous step passes.
+- [ ] Start the app and confirm the six steps appear in order: welcome, network check, RCP key, OpenCode, OpenWork, summary. A later step stays locked until the previous step passes.
 - [ ] Network check passes. Disconnect the VPN and confirm the app shows the VPN link and a working retry.
-- [ ] OpenCode step detects an existing install and skips it. On a clean machine it installs OpenCode without an admin prompt.
 - [ ] RCP key step opens the portal window. Complete the Entra ID login and the MFA prompt.
 - [ ] Create a key named `OpenWork`. Confirm the token is masked by default, the reveal button works, and the clipboard warning appears after copy.
-- [ ] Provider configuration step shows `~/.config/opencode/opencode.json` and its `.bak` path, then reports success.
-- [ ] Smoke test passes. A failure shows a readable detail and no key.
+- [ ] OpenCode step shows one card. The trace names the install result, then the config write to `~/.config/opencode/opencode.json` and its `.bak` path, then the smoke result.
+- [ ] OpenCode step detects an existing install and skips it. On a clean machine it installs OpenCode without an admin prompt.
+- [ ] Smoke test passes. A failure stops the step on the OpenCode card, and the trace names the smoke sub-action.
 - [ ] OpenWork step detects an existing install and skips it. On a clean machine it installs OpenWork without an admin prompt.
 - [ ] Summary shows both versions, the config paths, the key name and the smoke result.
 - [ ] Launch button opens the installed OpenWork app.
@@ -98,7 +98,7 @@ Run this checklist on the EPFL network or VPN, on a Windows x64 machine, on a ma
 - [ ] RCP key step detects the existing key and asks for the token. Paste the existing token with the manual field.
 - [ ] The portal still has exactly the same keys after the run. No key is renamed, revoked or deleted.
 - [ ] Provider configuration writes the existing token, and the smoke test passes.
-- [ ] Re-run the provider configuration step. It reports no change, does not overwrite the backup, and keeps other providers and user settings.
+- [ ] Re-run the OpenCode step. The trace reports the config change or no change, does not overwrite the backup, and keeps other providers and user settings.
 
 ### Installer checks, all platforms
 

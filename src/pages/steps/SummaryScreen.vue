@@ -45,7 +45,7 @@ const launch = async () => {
 }
 
 const smokeText = computed(() => {
-  const result = results.smokeTest
+  const result = results.opencode
   if (!result) return t('summary.smokeNotRun')
   return result.ok ? t('summary.smokePass') : t('summary.smokeFail')
 })

@@ -39,7 +39,7 @@ const steps = (bridge: RunnerBridge): StepRun[] => [
     },
   },
   {
-    id: 'providerConfig',
+    id: 'opencode',
     run: async () => {
       const token = bridge.results().rcpKey?.token
       return token
@@ -80,7 +80,7 @@ describe('flow store', () => {
       token: 'tok-123456789',
       keyName: 'OpenWork-2',
     })
-    expect(store.results.providerConfig).toEqual({
+    expect(store.results.opencode).toEqual({
       status: 'passed',
       path: '~/.config/opencode/opencode.json',
     })

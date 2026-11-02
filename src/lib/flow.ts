@@ -1,10 +1,8 @@
 export type StepId =
   | 'welcome'
   | 'network'
-  | 'opencode'
   | 'rcpKey'
-  | 'providerConfig'
-  | 'smokeTest'
+  | 'opencode'
   | 'openwork'
   | 'summary'
 
@@ -28,10 +26,8 @@ export type FlowResults = Partial<Record<StepId, StepResult>>
 export const STEP_ORDER: readonly StepId[] = [
   'welcome',
   'network',
-  'opencode',
   'rcpKey',
-  'providerConfig',
-  'smokeTest',
+  'opencode',
   'openwork',
   'summary',
 ]

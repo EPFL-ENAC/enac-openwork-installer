@@ -49,8 +49,6 @@ const detailOf = (id: StepId): string | undefined => {
         </template>
       </StepCard>
 
-      <StepCard id="opencode" :detail="detailOf('opencode')" />
-
       <StepCard id="rcpKey" :detail="detailOf('rcpKey')">
         <RcpKeyCard v-if="keyPrompt" :prompt="keyPrompt" @submit="answerKeys" />
         <p v-else-if="trace.stepStatuses.rcpKey === 'running'" class="hint" role="status">
@@ -58,8 +56,7 @@ const detailOf = (id: StepId): string | undefined => {
         </p>
       </StepCard>
 
-      <StepCard id="providerConfig" :detail="detailOf('providerConfig')" />
-      <StepCard id="smokeTest" :detail="detailOf('smokeTest')" />
+      <StepCard id="opencode" :detail="detailOf('opencode')" />
 
       <StepCard id="openwork" :detail="detailOf('openwork')">
         <template #fallback>

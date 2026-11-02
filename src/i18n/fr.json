@@ -21,8 +21,6 @@
     "error": {
       "generic": "Une erreur est survenue : {message}",
       "network": "Le réseau EPFL n'est pas accessible. Si vous êtes hors campus, connectez-vous au VPN EPFL.",
-      "smoke": "Le test de fonctionnement a échoué : {detail}",
-      "provider": "La configuration d'OpenCode n'a pas été écrite : {detail}",
       "missingKey": "Aucune clé RCP n'est disponible depuis l'étape précédente.",
       "openworkBroken": "La base de données d'OpenWork bloque le démarrage. Sauvegardez-la et videz-la, puis relancez l'étape."
     }
@@ -56,6 +54,12 @@
       "step3": "Collez le jeton dans le champ ci-dessous.",
       "pasteLabel": "Jeton",
       "paste": "Utiliser ce jeton"
+    }
+  },
+  "opencode": {
+    "error": {
+      "provider": "La configuration d'OpenCode n'a pas été écrite : {detail}",
+      "smoke": "Le test de fonctionnement a échoué : {detail}"
     }
   },
   "network": {
@@ -116,8 +120,6 @@
     "network": "Vérification du réseau",
     "opencode": "OpenCode",
     "rcpKey": "Clé RCP",
-    "providerConfig": "Configuration du fournisseur",
-    "smokeTest": "Test de fonctionnement",
     "openwork": "OpenWork",
     "summary": "Résumé"
   }

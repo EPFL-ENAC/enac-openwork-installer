@@ -20,8 +20,8 @@ const errorText = computed(() => {
   const kind = result?.kind
   const detail = maskSecrets(result?.detail ?? '')
   if (kind === 'network') return t('run.error.network')
-  if (kind === 'smoke') return t('run.error.smoke', { detail })
-  if (kind === 'invalid-json' || kind === 'io') return t('run.error.provider', { detail })
+  if (kind === 'smoke') return t('opencode.error.smoke', { detail })
+  if (kind === 'invalid-json' || kind === 'io') return t('opencode.error.provider', { detail })
   if (kind === 'missing-key') return t('run.error.missingKey')
   if (kind === 'openwork-broken') return t('run.error.openworkBroken')
   return t('run.error.generic', { message: detail })

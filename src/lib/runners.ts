@@ -247,7 +247,7 @@ const providerRun = async (
   emit('Writing the RCP provider into the OpenCode configuration')
   const outcome = await writeProviderConfig(token)
   if (!outcome.ok) {
-    emit(`The configuration was not written: ${outcome.detail}`)
+    emit(`The OpenCode configuration was not written: ${outcome.detail}`)
     return failed({ kind: outcome.code, message: outcome.detail })
   }
 
@@ -275,6 +275,22 @@ const smokeRun = async (
   }
 }
 
+const opencodeRun = async (
+  bridge: RunnerBridge,
+  emit: (line: string) => void,
+): Promise<StepOutcome> => {
+  const install = await toolRun('opencode', 'OpenCode', opencodeStatus, installOpencode, emit)
+  if (install.status === 'failed') return install
+
+  const config = await providerRun(bridge, emit)
+  if (config.status === 'failed') return config
+
+  const smoke = await smokeRun(bridge, emit)
+  if (smoke.status === 'failed') return smoke
+
+  return passed({ ...install.result, ...config.result, ...smoke.result })
+}
+
 const openworkRun = async (
   bridge: RunnerBridge,
   emit: (line: string) => void,
@@ -299,10 +315,8 @@ export const createRunners = (bridge: RunnerBridge): StepRun[] => {
 
   return [
     step('network', networkRun),
-    step('opencode', (emit) => toolRun('opencode', 'OpenCode', opencodeStatus, installOpencode, emit)),
     step('rcpKey', (emit) => rcpKeyRun(bridge, emit)),
-    step('providerConfig', (emit) => providerRun(bridge, emit)),
-    step('smokeTest', (emit) => smokeRun(bridge, emit)),
+    step('opencode', (emit) => opencodeRun(bridge, emit)),
     step('openwork', (emit) => openworkRun(bridge, emit)),
   ]
 }

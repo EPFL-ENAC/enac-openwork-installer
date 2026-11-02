@@ -67,7 +67,7 @@ describe('secret masking', () => {
 
   it('masks a secret shorter than eight characters', () => {
     registerSecret(SHORT_SECRET)
-    trace.log('smokeTest', `the request failed for ${SHORT_SECRET}`)
+    trace.log('opencode', `the request failed for ${SHORT_SECRET}`)
 
     expect(trace.entries[0].message).toBe('the request failed for ***')
   })

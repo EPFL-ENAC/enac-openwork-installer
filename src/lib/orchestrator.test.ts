@@ -111,7 +111,7 @@ describe('orchestrator pause point', () => {
             return passed()
           },
         },
-        { id: 'smokeTest', run: async () => (trace.push('smokeTest:run'), passed()) },
+        { id: 'openwork', run: async () => (trace.push('openwork:run'), passed()) },
       ],
       sink,
     )
@@ -120,13 +120,13 @@ describe('orchestrator pause point', () => {
     await new Promise((resolve) => setTimeout(resolve, 5))
 
     expect(trace).toEqual(['rcpKey:waiting'])
-    expect(statuses).toEqual({ welcome: 'passed', rcpKey: 'running', smokeTest: 'pending' })
+    expect(statuses).toEqual({ welcome: 'passed', rcpKey: 'running', openwork: 'pending' })
     expect(flow.state).toBe('running')
 
     release()
     await running
 
-    expect(trace).toEqual(['rcpKey:waiting', 'rcpKey:resumed', 'smokeTest:run'])
+    expect(trace).toEqual(['rcpKey:waiting', 'rcpKey:resumed', 'openwork:run'])
     expect(flow.state).toBe('done')
   })
 })
@@ -192,9 +192,9 @@ describe('orchestrator retry', () => {
           },
         },
         {
-          id: 'smokeTest',
+          id: 'openwork',
           run: async () => {
-            bump('smokeTest')
+            bump('openwork')
             return passed({ ok: true })
           },
         },
@@ -209,16 +209,16 @@ describe('orchestrator retry', () => {
 
     await flow.retry()
 
-    expect(calls).toEqual({ welcome: 1, opencode: 2, rcpKey: 1, smokeTest: 1 })
+    expect(calls).toEqual({ welcome: 1, opencode: 2, rcpKey: 1, openwork: 1 })
     expect(flow.state).toBe('done')
     expect(flow.failedStep).toBeNull()
     expect(flow.results).toEqual({
       welcome: { status: 'passed', detail: 'ok' },
       opencode: { status: 'passed', version: '1.2.3' },
       rcpKey: { status: 'skipped' },
-      smokeTest: { status: 'passed', ok: true },
+      openwork: { status: 'passed', ok: true },
     })
-    expect(onComplete).toEqual(['welcome', 'opencode', 'rcpKey', 'smokeTest'])
+    expect(onComplete).toEqual(['welcome', 'opencode', 'rcpKey', 'openwork'])
   })
 
   it('does nothing when retry runs in a non-failed state', async () => {
