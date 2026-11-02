@@ -21,18 +21,13 @@
      Verbatim from assets/config/colors.json + bootstrap-variables.scss
      ────────────────────────────────────────────────────────── */
 
-  /* Brand red — the EPFL signature */
+  /* Brand red — the EPFL signature. Web red only: the print red is not used. */
   --epfl-red:        #FF0000;   /* $red — pure web red, used for accents/markers */
   --epfl-red-dark:   #B51F1F;   /* $red-dark — primary CTA hover/active */
-  --epfl-leman:      #00A79F;   /* $leman — Lake Geneva teal */
+
+  /* Tertiary — Canard teal, kept in reserve for informational accents. */
   --epfl-canard:     #007480;   /* $canard — tertiary/duck teal */
   --epfl-canard-dark:#004248;   /* $canard-dark */
-
-  /* Identity / theme.json overrides for the Elements site itself.
-     EPFL print brand uses #E30713; the web codebase uses pure #FF0000.
-     We expose both and default to the web token. */
-  --epfl-red-print:  #E30713;
-  --epfl-red-print-dark: #92000E;
 
   /* Neutrals */
   --epfl-white:    #FFFFFF;
@@ -42,12 +37,6 @@
   --epfl-gray-500: #8E8E8E;
   --epfl-gray-600: #707070;
   --epfl-black:    #212121;   /* Soft black, not pure */
-
-  /* Bootstrap-aligned status colors */
-  --epfl-blue:    #4A90E2;
-  --epfl-orange:  #F5A623;
-  --epfl-green:   #7ED321;
-  --epfl-green-text: #699B32;
 
   /* ──────────────────────────────────────────────────────────
      COLOR — SEMANTIC TOKENS
@@ -84,22 +73,15 @@
   --tertiary-hover:    var(--epfl-canard-dark);
   --on-tertiary:       var(--epfl-white);
 
-  /* Status */
-  --success: var(--epfl-green);
-  --info:    var(--epfl-blue);
-  --warning: var(--epfl-orange);
+  /* Status — red is the only status hue. Everything else is grey. */
   --danger:  var(--epfl-red);
 
-  /* Status surfaces — alert tints (bg / border / text), hand-tuned */
-  --info-bg:     #E8F1FB; --info-border:    #B8D4F0; --info-fg:    #1E4A72;
-  --success-bg:  #ECFAE0; --success-border: #C8EEA0; --success-fg: #3A5E1A;
-  --warning-bg:  #FDF2DC; --warning-border: #F6DBA0; --warning-fg: #7A560F;
+  /* Status surfaces — the danger tints (bg / border / text) */
   --danger-bg:   #FFE5E5; --danger-border:  #FFB3B3; --danger-fg:  #80000C;
 
   /* Links */
   --link:        var(--epfl-black);   /* EPFL keeps links body-color + underline */
   --link-hover:  var(--epfl-red);
-  --link-visited:#5C5C5C;
 
   /* Highlight (mark) */
   --mark-bg: rgba(255,0,0,.2);
@@ -159,12 +141,6 @@
 
   --border-w: 1px;
   --focus-w:  2px;       /* focus outline width — distinctive 2px ring */
-
-  /* Shadows — Elements rarely uses shadows; these are for hover/dropdown */
-  --shadow-sm: 0 1px 2px rgba(33,33,33,.075);
-  --shadow:    0 .5rem 1rem rgba(33,33,33,.175);
-  --shadow-lg: 0 1rem 2rem rgba(33,33,33,.2);
-  --focus-ring: 0 0 0 .2rem rgba(255,0,0,.25); /* @kind shadow */
 
   /* Motion */
   --t-fast: .15s ease-in-out;   /* @kind other */

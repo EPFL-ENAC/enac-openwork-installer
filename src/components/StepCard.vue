@@ -44,6 +44,21 @@ const errorText = computed(() => {
         {{ t(`stepTitles.${id}`) }}
       </h2>
       <span :class="['card-status', `card-status-${status}`]">
+        <svg
+          v-if="status === 'passed'"
+          class="card-status-check"
+          viewBox="0 0 12 12"
+          aria-hidden="true"
+        >
+          <path
+            d="M2 6.5 4.5 9 10 3.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
         {{ t(`trace.status.${status}`) }}
       </span>
     </header>
@@ -80,19 +95,19 @@ const errorText = computed(() => {
 }
 
 .step-card-running {
-  border-left-color: var(--info);
+  border-left-color: var(--border-strong);
 }
 
 .step-card-passed {
-  border-left-color: var(--success-fg);
+  border-left-color: var(--fg-muted);
 }
 
 .step-card-skipped {
-  border-left-color: var(--warning-fg);
+  border-left-color: var(--border-subtle);
 }
 
 .step-card-failed {
-  border-left-color: var(--danger-fg);
+  border-left-color: var(--primary);
 }
 
 .step-card-pending {
@@ -121,7 +136,7 @@ const errorText = computed(() => {
 .step-spin {
   width: 0.75rem;
   height: 0.75rem;
-  border: 2px solid var(--primary);
+  border: 2px solid var(--fg-subtle);
   border-top-color: transparent;
   border-radius: var(--radius-pill);
   animation: step-turn 0.9s linear infinite;
@@ -131,7 +146,7 @@ const errorText = computed(() => {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: var(--radius-pill);
-  background: var(--warning-fg);
+  background: var(--fg-muted);
 }
 
 @keyframes step-turn {
@@ -144,14 +159,14 @@ const errorText = computed(() => {
 @media (prefers-reduced-motion: reduce) {
   .step-spin {
     animation: none;
-    border-top-color: var(--primary);
+    border-top-color: var(--fg-subtle);
   }
 }
 
 .card-waiting {
   margin: 0;
   font-size: var(--fs-sm);
-  color: var(--warning-fg);
+  color: var(--fg-muted);
 }
 
 .card-status {
@@ -161,24 +176,31 @@ const errorText = computed(() => {
   letter-spacing: 0.02em;
 }
 
+.card-status-check {
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-right: var(--space-1);
+  vertical-align: -0.125rem;
+}
+
 .card-status-pending {
   color: var(--fg-subtle);
 }
 
 .card-status-running {
-  color: var(--info);
+  color: var(--fg-muted);
 }
 
 .card-status-passed {
-  color: var(--success-fg);
+  color: var(--fg-muted);
 }
 
 .card-status-skipped {
-  color: var(--warning-fg);
+  color: var(--fg-disabled);
 }
 
 .card-status-failed {
-  color: var(--danger-fg);
+  color: var(--primary);
 }
 
 .card-detail {

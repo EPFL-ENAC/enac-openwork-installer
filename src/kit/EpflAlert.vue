@@ -1,5 +1,5 @@
 <script setup lang="ts">
-withDefaults(defineProps<{ variant?: 'info' | 'success' | 'warning' | 'danger' }>(), {
+withDefaults(defineProps<{ variant?: 'info' | 'danger' }>(), {
   variant: 'info',
 })
 </script>

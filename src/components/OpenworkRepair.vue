@@ -52,15 +52,16 @@ const repair = async () => {
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-3);
-  border: var(--border-w) solid var(--warning-border);
+  border: var(--border-w) solid var(--border-strong);
   border-radius: var(--radius);
-  background: var(--warning-bg);
+  background: var(--bg-subtle);
   font-size: var(--fs-sm);
 }
 
 .repair-title {
   margin: 0;
   font-size: var(--fs-h6);
+  color: var(--primary);
 }
 
 p {

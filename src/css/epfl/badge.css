@@ -12,9 +12,6 @@
 .epfl-badge-pill { border-radius: var(--radius-pill); padding: .25em .6em; }
 
 .epfl-badge-primary  { background: var(--primary); }
-.epfl-badge-success  { background: var(--success); }
-.epfl-badge-warning  { background: var(--warning); }
-.epfl-badge-info     { background: var(--info); }
 .epfl-badge-tertiary { background: var(--tertiary); }
 .epfl-badge-dark     { background: var(--bg-dark); }
 

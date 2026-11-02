@@ -66,7 +66,7 @@ watch(
 }
 
 .trace-scope {
-  color: var(--tertiary);
+  color: var(--fg-muted);
 }
 
 .trace-empty {

@@ -117,6 +117,43 @@ describe('StepCard activity mark', () => {
   })
 })
 
+const source = async (): Promise<string> => {
+  const specifier = 'node:fs'
+  const fs = (await import(/* @vite-ignore */ specifier)) as {
+    readFileSync: (url: URL, encoding: 'utf8') => string
+  }
+  return fs.readFileSync(new URL('./StepCard.vue', import.meta.url), 'utf8')
+}
+
+const styleBlock = (css: string, selector: string): string => {
+  const start = css.indexOf(selector)
+  expect(start, `${selector} is styled`).toBeGreaterThan(-1)
+  return css.slice(start, css.indexOf('}', start))
+}
+
+describe('StepCard status palette', () => {
+  it('marks a passed card with a check mark', async () => {
+    trace.reset()
+    trace.setStepStatus('opencode', 'passed')
+
+    expect(await render('')).toContain('card-status-check')
+  })
+
+  it('shows no check mark on a pending card', async () => {
+    trace.reset()
+
+    expect(await render('')).not.toContain('card-status-check')
+  })
+
+  it('paints pass grey and fail red, with no other status colour', async () => {
+    const css = await source()
+
+    expect(css).not.toMatch(/--(warning|success|info)/)
+    expect(styleBlock(css, '.card-status-passed')).toContain('var(--fg-muted)')
+    expect(styleBlock(css, '.card-status-failed')).toContain('var(--primary)')
+  })
+})
+
 describe('StepCard error block', () => {
   it('shows no error block when the failed step has no result left', async () => {
     store.failedStep.value = 'openwork'
