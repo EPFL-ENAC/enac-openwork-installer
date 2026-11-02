@@ -16,9 +16,10 @@ const OPENWORK_APPIMAGE: &str = "OpenWork.AppImage";
 pub const OPENWORK_DESKTOP_NAME: &str = "openwork.desktop";
 #[cfg(any(windows, test))]
 const OPENWORK_PRODUCT_NAME: &str = "openwork";
-/// Install directory name of the electron-builder NSIS per-user build.
+/// Install directory names of the electron-builder NSIS per-user build, most
+/// current first. Older releases used the bare product name.
 #[cfg(any(windows, test))]
-const OPENWORK_PROGRAMS_DIR: &str = "openwork";
+const OPENWORK_PROGRAMS_DIRS: [&str; 2] = ["@openworkdesktop", "openwork"];
 
 /// One entry of the HKCU uninstall registry key, as far as detection needs it.
 #[derive(Debug, Clone, Default, PartialEq, serde::Deserialize)]
@@ -333,12 +334,15 @@ pub fn windows_status_from(
     let entry = entries
         .iter()
         .find(|entry| is_openwork_uninstall_entry(entry));
-    if let Some(exe) = programs_dir.map(|dir| dir.join(OPENWORK_PROGRAMS_DIR).join(OPENWORK_EXE)) {
-        if exe.is_file() {
-            return Some(installed_at(
-                &exe,
-                entry.and_then(|entry| entry.version.clone()),
-            ));
+    if let Some(programs) = programs_dir {
+        for name in OPENWORK_PROGRAMS_DIRS {
+            let exe = programs.join(name).join(OPENWORK_EXE);
+            if exe.is_file() {
+                return Some(installed_at(
+                    &exe,
+                    entry.and_then(|entry| entry.version.clone()),
+                ));
+            }
         }
     }
     let dir = entry?.install_location.as_deref().map(str::trim)?;
@@ -1523,10 +1527,27 @@ mod tests {
     #[test]
     fn detects_openwork_at_the_electron_builder_default_path() {
         let programs = scratch("default-path");
-        let exe = write_exe(&programs.join("openwork"), "OpenWork.exe");
+        let exe = write_exe(&programs.join("@openworkdesktop"), "OpenWork.exe");
         let status = windows_status_from(Some(&programs), &[]).unwrap();
         assert!(status.installed);
         assert_eq!(status.path, Some(exe.display().to_string()));
+    }
+
+    #[test]
+    fn detects_openwork_in_a_legacy_programs_directory() {
+        let programs = scratch("legacy-path");
+        let exe = write_exe(&programs.join("openwork"), "OpenWork.exe");
+        let status = windows_status_from(Some(&programs), &[]).unwrap();
+        assert_eq!(status.path, Some(exe.display().to_string()));
+    }
+
+    #[test]
+    fn prefers_the_current_programs_directory_over_the_legacy_one() {
+        let programs = scratch("both-paths");
+        let current = write_exe(&programs.join("@openworkdesktop"), "OpenWork.exe");
+        write_exe(&programs.join("openwork"), "OpenWork.exe");
+        let status = windows_status_from(Some(&programs), &[]).unwrap();
+        assert_eq!(status.path, Some(current.display().to_string()));
     }
 
     #[test]
