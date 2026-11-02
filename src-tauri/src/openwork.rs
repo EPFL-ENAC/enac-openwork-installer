@@ -201,6 +201,7 @@ async fn install_into(
     match platform {
         "macos" => install_dmg(&installer, log).await,
         "windows" => install_nsis(&installer, log).await,
+        #[cfg(target_os = "linux")]
         "linux" => install_appimage(&installer, &release.version, log).await,
         other => Err(AppError::new(
             "unsupported",
