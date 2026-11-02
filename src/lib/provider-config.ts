@@ -1,4 +1,5 @@
 import { BaseDirectory, copyFile, exists, mkdir, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { restrictProviderConfig } from './ipc'
 
 export const PROVIDER_ID = 'epfl-rcp-aiaas'
 export const RCP_BASE_URL = 'https://inference-rcp.epfl.ch/v1'
@@ -115,6 +116,8 @@ export async function writeProviderConfig(apiKey: string): Promise<WriteOutcome>
       await mkdir(CONFIG_DIR, { baseDir: BASE_DIR, recursive: true })
     }
     await writeTextFile(CONFIG_PATH, `${JSON.stringify(merged, null, 2)}\n`, options)
+    // Both files carry the token, so the owner-only mode is set after the write.
+    await restrictProviderConfig()
 
     return { ok: true, ...paths, changed: true, backupCreated }
   } catch (error) {

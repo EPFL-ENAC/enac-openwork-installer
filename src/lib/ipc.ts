@@ -59,12 +59,14 @@ export const installOpenwork = () => invoke<InstallResult>('install_openwork')
 export const launchOpenwork = () => invoke<void>('launch_openwork')
 export const openworkStateStatus = () => invoke<OpenWorkState>('openwork_state_status')
 export const openworkRepairState = () => invoke<StateRepair>('openwork_repair_state')
-export const smokeTest = () => invoke<SmokeResult>('smoke_test')
+export const smokeTest = (token?: string | null) =>
+  invoke<SmokeResult>('smoke_test', { token: token ?? null })
 export const portalStartLogin = () => invoke<void>('portal_start_login')
 export const portalGetForm = () => invoke<PortalForm>('portal_get_form')
 export const portalCreateKey = (name: string, unit?: string | null) =>
   invoke<CreatedKey>('portal_create_key', { name, unit: unit ?? null })
 export const portalClose = () => invoke<void>('portal_close')
+export const restrictProviderConfig = () => invoke<void>('restrict_provider_config')
 export const onPortalLogin = (handler: (result: PortalLogin) => void): Promise<UnlistenFn> =>
   listen<PortalLogin>('portal-login', (event) => handler(event.payload))
 export const onBackendLog = (handler: (log: BackendLog) => void): Promise<UnlistenFn> =>

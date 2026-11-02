@@ -10,9 +10,13 @@ const PROMPT: &str = "Reply with the single word OK.";
 const DETAIL_LIMIT: usize = 500;
 
 #[tauri::command]
-pub async fn smoke_test() -> Result<SmokeResult, AppError> {
+pub async fn smoke_test(token: Option<String>) -> Result<SmokeResult, AppError> {
+    let secret = token.as_deref();
     let Some(binary) = opencode::binary_path() else {
-        return Ok(failed("OpenCode is not installed, run the OpenCode step first"));
+        return Ok(failed(
+            "OpenCode is not installed, run the OpenCode step first",
+            secret,
+        ));
     };
 
     // Standalone mode keeps the check off the shared OpenCode server, so a stale
@@ -27,14 +31,14 @@ pub async fn smoke_test() -> Result<SmokeResult, AppError> {
     let reply = match output {
         Ok(output) => output.stdout.trim().to_string(),
         Err(error) => {
-            return Ok(failed(format!(
-                "the {PROVIDER} check failed: {}",
-                error.message
-            )))
+            return Ok(failed(
+                format!("the {PROVIDER} check failed: {}", error.message),
+                secret,
+            ))
         }
     };
     if reply.is_empty() {
-        return Ok(failed(format!("{MODEL} answered with no text")));
+        return Ok(failed(format!("{MODEL} answered with no text"), secret));
     }
 
     Ok(SmokeResult {
@@ -47,11 +51,11 @@ pub async fn smoke_test() -> Result<SmokeResult, AppError> {
     })
 }
 
-fn failed(message: impl Into<String>) -> SmokeResult {
+fn failed(message: impl Into<String>, secret: Option<&str>) -> SmokeResult {
     SmokeResult {
         ok: false,
         detail: None,
-        error: Some(message.into()),
+        error: Some(util::mask_secret(&message.into(), secret)),
     }
 }
 
@@ -66,9 +70,11 @@ fn truncate(text: &str, limit: usize) -> String {
 mod tests {
     use super::*;
 
+    const FIXTURE_TOKEN: &str = "sk-live-fixture-0123456789";
+
     #[test]
     fn failure_and_detail_stay_readable() {
-        let result = failed("boom");
+        let result = failed("boom", None);
         assert!(!result.ok);
         assert_eq!(result.error.as_deref(), Some("boom"));
         assert_eq!(result.detail, None);
@@ -78,5 +84,36 @@ mod tests {
         let cut = truncate(&long, DETAIL_LIMIT);
         assert_eq!(cut.chars().count(), DETAIL_LIMIT + 3);
         assert!(cut.ends_with("..."));
+    }
+
+    #[test]
+    fn masks_a_token_that_reaches_the_error() {
+        // Fixture: the first stderr line of `opencode run` can quote the key.
+        let stderr = format!("HTTP 401 for key {FIXTURE_TOKEN}");
+
+        let result = failed(
+            format!("the {PROVIDER} check failed: {stderr}"),
+            Some(FIXTURE_TOKEN),
+        );
+
+        let message = result.error.expect("the failure carries an error");
+        assert!(message.contains(util::MASK), "masked message: {message}");
+        assert!(
+            !message.contains(FIXTURE_TOKEN),
+            "leaked message: {message}"
+        );
+    }
+
+    #[test]
+    fn masks_a_short_token_and_keeps_the_rest() {
+        let result = failed("HTTP 401 for key k9z", Some("k9z"));
+
+        assert_eq!(result.error.as_deref(), Some("HTTP 401 for key ***"));
+    }
+
+    #[test]
+    fn without_a_token_the_message_stays_unchanged() {
+        assert_eq!(failed("boom", None).error.as_deref(), Some("boom"));
+        assert_eq!(failed("boom", Some("  ")).error.as_deref(), Some("boom"));
     }
 }

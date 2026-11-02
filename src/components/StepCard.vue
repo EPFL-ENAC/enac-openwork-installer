@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EpflAlert, EpflButton } from '../kit'
 import type { StepId } from '../lib/flow'
-import { trace } from '../lib/trace'
+import { maskSecrets, trace } from '../lib/trace'
 import { useFlow } from '../stores/flow'
 
 const props = defineProps<{ id: StepId; detail?: string }>()
@@ -13,11 +13,12 @@ const { results, state, failedStep, retry } = useFlow()
 
 const status = computed(() => trace.stepStatuses[props.id])
 const failedHere = computed(() => failedStep.value === props.id)
+const safeDetail = computed(() => (props.detail ? maskSecrets(props.detail) : ''))
 
 const errorText = computed(() => {
   const result = results[props.id]
   const kind = result?.kind
-  const detail = result?.detail ?? ''
+  const detail = maskSecrets(result?.detail ?? '')
   if (kind === 'network') return t('run.error.network')
   if (kind === 'smoke') return t('run.error.smoke', { detail })
   if (kind === 'invalid-json' || kind === 'io') return t('run.error.provider', { detail })
@@ -36,7 +37,7 @@ const errorText = computed(() => {
       </span>
     </header>
 
-    <p v-if="detail" class="card-detail">{{ detail }}</p>
+    <p v-if="safeDetail" class="card-detail">{{ safeDetail }}</p>
 
     <EpflAlert v-if="failedHere" variant="danger">{{ errorText }}</EpflAlert>
 

@@ -18,12 +18,11 @@ export interface TraceSink {
 
 export const MASK = '***'
 
-const MIN_SECRET_LENGTH = 8
-
 const secrets = new Set<string>()
 
+// Any length: a short token still identifies the user, so it is always masked.
 export const registerSecret = (value: string): void => {
-  if (value.trim().length < MIN_SECRET_LENGTH) return
+  if (value.length === 0) return
   secrets.add(value)
 }
 

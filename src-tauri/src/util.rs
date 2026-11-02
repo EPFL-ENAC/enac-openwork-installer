@@ -50,6 +50,17 @@ pub fn arch() -> &'static str {
     }
 }
 
+pub const MASK: &str = "***";
+
+/// Replaces one registered secret, of any length, with [`MASK`]. An empty or
+/// blank secret is skipped: an empty pattern would mask every character boundary.
+pub fn mask_secret(message: &str, secret: Option<&str>) -> String {
+    let Some(secret) = secret.map(str::trim).filter(|secret| !secret.is_empty()) else {
+        return message.to_string();
+    };
+    message.replace(secret, MASK)
+}
+
 pub fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))

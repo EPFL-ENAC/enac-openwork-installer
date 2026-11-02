@@ -3,6 +3,7 @@ import { formatClock, maskSecrets, registerSecret, trace, type TraceStepStatus }
 
 const SECRET_A = 'sk-alpha-0123456789'
 const SECRET_B = 'rcp-beta-9876543210'
+const SHORT_SECRET = 'k9z'
 
 beforeEach(() => {
   trace.reset()
@@ -64,11 +65,17 @@ describe('secret masking', () => {
     expect(trace.entries[0].message).toBe('*** then ***')
   })
 
-  it('ignores empty and very short values', () => {
-    registerSecret('')
-    registerSecret('abc')
+  it('masks a secret shorter than eight characters', () => {
+    registerSecret(SHORT_SECRET)
+    trace.log('smokeTest', `the request failed for ${SHORT_SECRET}`)
 
-    expect(maskSecrets('abc stays here')).toBe('abc stays here')
+    expect(trace.entries[0].message).toBe('the request failed for ***')
+  })
+
+  it('ignores an empty value', () => {
+    registerSecret('')
+
+    expect(maskSecrets('nothing to mask here')).toBe('nothing to mask here')
   })
 
   it('never stores a secret in the entry', () => {

@@ -8,7 +8,10 @@ const fs = vi.hoisted(() => ({
   copyFile: vi.fn(),
 }))
 
+const { restrictProviderConfig } = vi.hoisted(() => ({ restrictProviderConfig: vi.fn() }))
+
 vi.mock('@tauri-apps/plugin-fs', () => ({ BaseDirectory: { Home: 21 }, ...fs }))
+vi.mock('./ipc', () => ({ restrictProviderConfig }))
 
 import {
   BACKUP_PATH,
@@ -33,6 +36,7 @@ beforeEach(() => {
   fs.writeTextFile.mockReset().mockResolvedValue(undefined)
   fs.mkdir.mockReset().mockResolvedValue(undefined)
   fs.copyFile.mockReset().mockResolvedValue(undefined)
+  restrictProviderConfig.mockReset().mockResolvedValue(undefined)
 })
 
 describe('mergeProviderConfig', () => {
@@ -157,6 +161,18 @@ describe('writeProviderConfig', () => {
 
     expect(outcome).toMatchObject({ ok: true, backupCreated: false, changed: true })
     expect(fs.copyFile).not.toHaveBeenCalled()
+  })
+
+  it('restricts the permissions of the config and the backup after the write', async () => {
+    fs.exists.mockImplementation(async (path: string) => path === CONFIG_PATH)
+    fs.readTextFile.mockResolvedValue(JSON.stringify({ theme: 'dark' }))
+
+    await writeProviderConfig(API_KEY)
+
+    expect(restrictProviderConfig).toHaveBeenCalledOnce()
+    expect(fs.writeTextFile.mock.invocationCallOrder[0]).toBeLessThan(
+      restrictProviderConfig.mock.invocationCallOrder[0],
+    )
   })
 
   it('writes nothing when the config is already merged', async () => {

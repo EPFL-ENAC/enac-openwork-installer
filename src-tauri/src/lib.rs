@@ -3,6 +3,7 @@ mod openwork;
 mod openwork_state;
 mod portal;
 mod prereq;
+mod provider_config;
 mod smoke;
 mod types;
 mod util;
@@ -23,6 +24,7 @@ pub fn run() {
             openwork_state::openwork_state_status,
             openwork_state::openwork_repair_state,
             smoke::smoke_test,
+            provider_config::restrict_provider_config,
             portal::portal_start_login,
             portal::portal_get_form,
             portal::portal_create_key,

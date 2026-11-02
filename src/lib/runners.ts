@@ -255,10 +255,13 @@ const providerRun = async (
   return passed({ path: outcome.configPath })
 }
 
-const smokeRun = async (emit: (line: string) => void): Promise<StepOutcome> => {
+const smokeRun = async (
+  bridge: RunnerBridge,
+  emit: (line: string) => void,
+): Promise<StepOutcome> => {
   emit('Running the smoke test')
   try {
-    const result = await smokeTest()
+    const result = await smokeTest(bridge.results().rcpKey?.token ?? null)
     if (result.ok) {
       emit('The smoke test passed')
       return passed({ ok: true, detail: result.detail ?? undefined })
@@ -299,7 +302,7 @@ export const createRunners = (bridge: RunnerBridge): StepRun[] => {
     step('opencode', (emit) => toolRun('opencode', 'OpenCode', opencodeStatus, installOpencode, emit)),
     step('rcpKey', (emit) => rcpKeyRun(bridge, emit)),
     step('providerConfig', (emit) => providerRun(bridge, emit)),
-    step('smokeTest', smokeRun),
+    step('smokeTest', (emit) => smokeRun(bridge, emit)),
     step('openwork', (emit) => openworkRun(bridge, emit)),
   ]
 }

@@ -15,6 +15,7 @@ import {
   portalCreateKey,
   portalGetForm,
   portalStartLogin,
+  restrictProviderConfig,
   smokeTest,
 } from './ipc'
 
@@ -35,6 +36,7 @@ describe('ipc wrappers', () => {
     await portalGetForm()
     await portalCreateKey('Alice')
     await portalClose()
+    await restrictProviderConfig()
 
     expect(invoke.mock.calls.map(([command]) => command)).toEqual([
       'opencode_status',
@@ -47,6 +49,7 @@ describe('ipc wrappers', () => {
       'portal_get_form',
       'portal_create_key',
       'portal_close',
+      'restrict_provider_config',
     ])
   })
 
