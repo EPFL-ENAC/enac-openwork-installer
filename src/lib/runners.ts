@@ -340,8 +340,8 @@ const openworkRun = async (
     )
     emit(
       outcome.workspaceConfigWritten
-        ? `The workspace opencode.jsonc includes the ${OPENWORK_PROVIDER_ID} provider`
-        : 'The workspace opencode.jsonc already includes the provider or is not plain JSON',
+        ? `The stale ${OPENWORK_PROVIDER_ID} provider is removed from the workspace opencode.jsonc`
+        : `The workspace opencode.jsonc carries no ${OPENWORK_PROVIDER_ID} provider override`,
     )
     emit(
       outcome.defaultModelWritten

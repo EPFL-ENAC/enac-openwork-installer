@@ -1213,15 +1213,19 @@ fn resolve_default_workspace(
     Ok(Some(WorkspaceTarget { id, path }))
 }
 
-/// The documented V1 channel: the workspace opencode.jsonc carries the same
-/// provider definition. A file with JSONC comments is left alone (the runtime
-/// rows carry the provider there), and an existing plain-JSON file is merged.
-fn merge_workspace_config(workspace_dir: &Path) -> Result<bool, AppError> {
+/// Earlier installs wrote the provider into the workspace opencode.jsonc. The
+/// engine reads that file as a project layer and resolves the `{env:}` apiKey
+/// itself, but OpenWork spawns the engine with a whitelisted environment that
+/// never carries the RCP key, so the empty key shadowed the provider OpenWork
+/// injects globally and every model answered a credentials error. A fresh
+/// workspace carries no such file, so this removes the entry and drops the file
+/// when nothing else remains. A file with JSONC comments is left alone.
+fn heal_workspace_config(workspace_dir: &Path) -> Result<bool, AppError> {
     let path = workspace_dir.join(WORKSPACE_CONFIG_FILE);
     let existing = match std::fs::read_to_string(&path) {
         Ok(text) => serde_json::from_str::<serde_json::Value>(&text)
             .unwrap_or(serde_json::Value::String(text)), // sentinel: not plain JSON
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => serde_json::json!({}),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
         Err(error) => {
             return Err(AppError::io(format!(
                 "cannot read {}: {error}",
@@ -1229,32 +1233,41 @@ fn merge_workspace_config(workspace_dir: &Path) -> Result<bool, AppError> {
             )))
         }
     };
-    if existing.is_string() {
+    let Some(mut next) = existing.as_object().cloned() else {
+        return Ok(false);
+    };
+    let removed = match next
+        .get_mut("provider")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        Some(providers) => {
+            let removed = providers.remove(OPENWORK_PROVIDER_ID).is_some();
+            if removed && providers.is_empty() {
+                next.remove("provider");
+            }
+            removed
+        }
+        None => false,
+    };
+    if !removed {
         return Ok(false);
     }
-    let (next, changed) = merge_runtime_provider(existing)?;
-    if !changed {
-        return Ok(false);
+    if next.keys().all(|key| key == "$schema") {
+        std::fs::remove_file(&path)
+            .map_err(|e| AppError::io(format!("cannot remove {}: {e}", path.display())))?;
+        return Ok(true);
     }
     let text = format!(
         "{}\n",
         serde_json::to_string_pretty(&next)
             .map_err(|e| AppError::parse(format!("cannot serialize the workspace config: {e}")))?
     );
-    if let Some(parent) = path.parent() {
-        // A workspace folder that cannot be created means the desktop recorded
-        // a path that is gone; the runtime rows carry the provider, so the
-        // workspace file is skipped instead of failing the step.
-        if std::fs::create_dir_all(parent).is_err() {
-            return Ok(false);
-        }
-    }
     std::fs::write(&path, &text)
         .map_err(|e| AppError::io(format!("cannot write {}: {e}", path.display())))?;
     Ok(true)
 }
 
-/// One configure run: env store, workspace opencode.jsonc, provider rows,
+/// One configure run: env store, stale workspace config, provider rows,
 /// default model. Every write is idempotent, so a retry only rewrites what
 /// changed.
 pub fn configure_openwork_in(
@@ -1334,7 +1347,7 @@ pub fn configure_openwork_in(
         };
     outcome.default_model_workspace_id = workspace_id.clone();
     if let Some(workspace_dir) = &workspace_path {
-        outcome.workspace_config_written = merge_workspace_config(workspace_dir)?;
+        outcome.workspace_config_written = heal_workspace_config(workspace_dir)?;
     }
 
     let mut writes = Vec::new();
@@ -1431,11 +1444,11 @@ pub async fn configure_openwork(
         "the RCP key is already stored in the OpenWork environment store".to_string()
     });
     log.log(if outcome.workspace_config_written {
-        format!("the workspace opencode.jsonc includes the {OPENWORK_PROVIDER_ID} provider")
-    } else {
         format!(
-            "the workspace opencode.jsonc already includes the {OPENWORK_PROVIDER_ID} provider or is not plain JSON"
+            "the stale {OPENWORK_PROVIDER_ID} provider is removed from the workspace opencode.jsonc"
         )
+    } else {
+        format!("the workspace opencode.jsonc carries no {OPENWORK_PROVIDER_ID} provider override")
     });
     match (&outcome.default_model_workspace_id, outcome.default_model_written) {
         (Some(workspace_id), true) => log.log(format!(
@@ -1995,6 +2008,15 @@ mod tests {
         dir
     }
 
+    /// The exact provider block an earlier install wrote into the default
+    /// workspace. The engine resolves the {env:} template against a whitelisted
+    /// environment that never carries the RCP key, so the empty key failed every
+    /// model request with a credentials error.
+    fn stale_workspace_config() -> String {
+        r#"{"provider":{"epfl-aiaas":{"models":{"epfl-aiaas/large":{"name":"RCP AIaaS Large"},"epfl-aiaas/small":{"name":"RCP AIaaS Small"}},"name":"RCP AI Inference as a Service","npm":"@ai-sdk/openai-compatible","options":{"apiKey":"{env:EPFL_AIAAS_API_KEY}","baseURL":"https://inference-rcp.epfl.ch/v1"}}}}"#
+            .to_string()
+    }
+
     /// A state file the desktop would write for one local workspace under a
     /// temporary folder, so the workspace config write stays inside the test
     /// sandbox.
@@ -2295,7 +2317,7 @@ mod tests {
         .unwrap();
         assert!(outcome.provider_written);
         assert!(outcome.env_written);
-        assert!(outcome.workspace_config_written);
+        assert!(!outcome.workspace_config_written);
         assert!(outcome.default_model_written);
 
         let folder = default_workspace_dir(&home);
@@ -2361,21 +2383,9 @@ mod tests {
         assert_eq!(model["providerID"], "epfl-aiaas");
         assert_eq!(model["modelID"], OPENWORK_MODEL_LARGE);
 
-        let workspace_config: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(folder.join("opencode.jsonc")).unwrap())
-                .unwrap();
-        assert_eq!(
-            workspace_config["provider"]["epfl-aiaas"]["npm"],
-            "@ai-sdk/openai-compatible"
-        );
-        assert_eq!(
-            workspace_config["provider"]["epfl-aiaas"]["options"]["apiKey"],
-            "{env:EPFL_AIAAS_API_KEY}"
-        );
-        assert_eq!(
-            workspace_config["provider"]["epfl-aiaas"]["models"][OPENWORK_MODEL_SMALL]["name"],
-            "RCP AIaaS Small"
-        );
+        // The engine injects the configured provider globally, and a workspace
+        // file that repeats it breaks the auth, so a fresh home gets no file.
+        assert!(!folder.join("opencode.jsonc").exists());
 
         let again = configure_openwork_in(
             &config_dir,
@@ -2411,7 +2421,7 @@ mod tests {
         let outcome =
             configure_openwork_in(&config_dir, &user_data, &home, "test-token", 1).unwrap();
         assert!(outcome.default_model_written);
-        assert!(outcome.workspace_config_written);
+        assert!(!outcome.workspace_config_written);
         assert_eq!(
             outcome.default_model_workspace_id.as_deref(),
             Some("ws_05771fd9f545")
@@ -2420,7 +2430,7 @@ mod tests {
         assert!(
             default_model_json(&config_dir.join("runtime.sqlite"), "ws_05771fd9f545").is_some()
         );
-        assert!(workspace_dir.join("opencode.jsonc").is_file());
+        assert!(!workspace_dir.join("opencode.jsonc").exists());
     }
 
     #[test]
@@ -2447,7 +2457,7 @@ mod tests {
             configure_openwork_in(&config_dir, &user_data, &home, "test-token", 2).unwrap();
         assert!(outcome.provider_written);
         assert!(outcome.env_written);
-        assert!(outcome.workspace_config_written);
+        assert!(!outcome.workspace_config_written);
         assert!(outcome.default_model_written);
 
         let db = config_dir.join("runtime.sqlite");
@@ -2513,6 +2523,65 @@ mod tests {
             std::fs::read_to_string(workspace_dir.join("opencode.jsonc")).unwrap(),
             original
         );
+    }
+
+    #[test]
+    fn heals_the_workspace_config_written_by_an_earlier_version() {
+        let config_dir = configure_dir("heal-config");
+        let user_data = configure_dir("heal-user-data");
+        let home = configure_dir("heal-home");
+        let workspace_dir = configure_dir("heal-workspace");
+        std::fs::create_dir_all(&user_data).unwrap();
+        std::fs::write(
+            user_data.join("openwork-workspaces.json"),
+            state_with_workspace("ws_05771fd9f545", &workspace_dir),
+        )
+        .unwrap();
+        std::fs::write(
+            workspace_dir.join("opencode.jsonc"),
+            stale_workspace_config(),
+        )
+        .unwrap();
+
+        let outcome =
+            configure_openwork_in(&config_dir, &user_data, &home, "test-token", 1).unwrap();
+        assert!(outcome.workspace_config_written);
+        assert!(!workspace_dir.join("opencode.jsonc").exists());
+
+        let again = configure_openwork_in(&config_dir, &user_data, &home, "test-token", 2).unwrap();
+        assert!(!again.workspace_config_written);
+        assert!(!workspace_dir.join("opencode.jsonc").exists());
+    }
+
+    #[test]
+    fn keeps_foreign_keys_when_healing_the_workspace_config() {
+        let config_dir = configure_dir("heal-foreign-config");
+        let user_data = configure_dir("heal-foreign-user-data");
+        let home = configure_dir("heal-foreign-home");
+        let workspace_dir = configure_dir("heal-foreign-workspace");
+        std::fs::create_dir_all(&user_data).unwrap();
+        std::fs::write(
+            user_data.join("openwork-workspaces.json"),
+            state_with_workspace("ws_05771fd9f545", &workspace_dir),
+        )
+        .unwrap();
+        let mut file: serde_json::Value = serde_json::from_str(&stale_workspace_config()).unwrap();
+        file["$schema"] = serde_json::json!("https://opencode.ai/config.json");
+        file["model"] = serde_json::json!("other/model");
+        file["provider"]["other"] = serde_json::json!({"name": "kept"});
+        std::fs::write(workspace_dir.join("opencode.jsonc"), file.to_string()).unwrap();
+
+        let outcome =
+            configure_openwork_in(&config_dir, &user_data, &home, "test-token", 1).unwrap();
+        assert!(outcome.workspace_config_written);
+        let healed: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(workspace_dir.join("opencode.jsonc")).unwrap(),
+        )
+        .unwrap();
+        assert!(healed["provider"][OPENWORK_PROVIDER_ID].is_null());
+        assert_eq!(healed["provider"]["other"]["name"], "kept");
+        assert_eq!(healed["model"], "other/model");
+        assert_eq!(healed["$schema"], "https://opencode.ai/config.json");
     }
 
     #[test]
@@ -2628,10 +2697,30 @@ mod tests {
         );
         let config_dir = unix_openwork_config_dir(None, &home);
         let user_data = home.join(".config").join(OPENWORK_USER_DATA_DIR);
+        let folder = default_workspace_dir(&home);
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join(WORKSPACE_CONFIG_FILE), stale_workspace_config()).unwrap();
+
         let outcome =
             configure_openwork_in(&config_dir, &user_data, &home, "rcp-verify-token", now_ms())
                 .unwrap();
         println!("{outcome:?}");
+        // Acceptance: the default workspace ends up with the shape a fresh
+        // workspace has, no provider override, while the runtime row keeps it.
+        assert!(outcome.workspace_config_written);
+        assert!(!folder.join(WORKSPACE_CONFIG_FILE).exists());
+        let runtime = runtime_config_json(
+            &config_dir.join("runtime.sqlite"),
+            "__openwork_engine_global__",
+        )
+        .unwrap();
+        assert!(runtime.contains(OPENWORK_PROVIDER_ID));
+
+        let again =
+            configure_openwork_in(&config_dir, &user_data, &home, "rcp-verify-token", now_ms())
+                .unwrap();
+        assert!(!again.workspace_config_written);
+        assert!(!folder.join(WORKSPACE_CONFIG_FILE).exists());
     }
 
     #[test]
@@ -2644,7 +2733,7 @@ mod tests {
             configure_openwork_in(&config_dir, &user_data, &home, "test-token", 1).unwrap();
         assert!(outcome.env_written);
         assert!(outcome.provider_written);
-        assert!(outcome.workspace_config_written);
+        assert!(!outcome.workspace_config_written);
         assert!(outcome.default_model_written);
         assert!(config_dir.join("env.json").is_file());
         assert!(config_dir.join("runtime.sqlite").is_file());
