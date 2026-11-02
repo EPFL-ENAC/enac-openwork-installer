@@ -1,6 +1,13 @@
 # EPFL OpenWork Installer
 
-Desktop installer for OpenWork and configuration to use EPFL RCP's AI as a Service inference, built with Tauri 2 and Vue 3.
+Desktop installer for OpenWork, with configuration to use EPFL RCP's AI as a Service (AIasS) inference, built with Tauri 2 and Vue 3.
+
+It does the following:
+
+- Create an API key for LLM inference on EPFL RCP AIaaS (must be on EPFL network or VPN)
+- Install OpenCode
+- Install OpenWork
+- Configure OpenWork to use EPFL RCP AIaaS models ("Large" and "Small")
 
 
 ## Build matrix
