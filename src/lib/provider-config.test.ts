@@ -13,6 +13,7 @@ const { restrictProviderConfig } = vi.hoisted(() => ({ restrictProviderConfig: v
 vi.mock('@tauri-apps/plugin-fs', () => ({ BaseDirectory: { Home: 21 }, ...fs }))
 vi.mock('./ipc', () => ({ restrictProviderConfig }))
 
+import jsoncFixture from './fixtures/opencode.jsonc?raw'
 import {
   BACKUP_PATH,
   CONFIG_PATH,
@@ -20,6 +21,7 @@ import {
   RCP_BASE_URL,
   displayPath,
   mergeProviderConfig,
+  stripJsonc,
   writeProviderConfig,
 } from './provider-config'
 
@@ -117,6 +119,40 @@ describe('mergeProviderConfig', () => {
   })
 })
 
+describe('stripJsonc', () => {
+  it('accepts the committed JSONC fixture that plain JSON.parse rejects', () => {
+    // WebKit/JSC says "Property name must be a string literal", V8 says "Expected property name".
+    expect(() => JSON.parse(jsoncFixture)).toThrow(
+      /Property name must be a string literal|Expected property name|Unexpected token/,
+    )
+
+    const parsed = JSON.parse(stripJsonc(jsoncFixture))
+
+    expect(parsed).toMatchObject({
+      $schema: 'https://opencode.ai/config.json',
+      theme: 'dark',
+      providers: { local: { name: 'Local' } },
+    })
+  })
+
+  it('keeps comment and comma characters inside strings', () => {
+    const text = '{"url": "https://example.test/a//b", "note": "a, } b", "list": [1, 2,],}'
+
+    expect(JSON.parse(stripJsonc(text))).toEqual({
+      url: 'https://example.test/a//b',
+      note: 'a, } b',
+      list: [1, 2],
+    })
+  })
+
+  it('passes strict JSON through unchanged and still reports real breakage', () => {
+    const strict = '{"a": 1}'
+
+    expect(stripJsonc(strict)).toBe(strict)
+    expect(() => JSON.parse(stripJsonc('{ broken'))).toThrow(SyntaxError)
+  })
+})
+
 describe('displayPath', () => {
   it('shows home shorthand on unix and USERPROFILE on windows', () => {
     expect(displayPath(CONFIG_PATH, 'Mozilla/5.0 (X11; Linux x86_64)')).toBe(
@@ -185,6 +221,21 @@ describe('writeProviderConfig', () => {
     expect(outcome).toMatchObject({ ok: true, changed: false, backupCreated: false })
     expect(fs.copyFile).not.toHaveBeenCalled()
     expect(fs.writeTextFile).not.toHaveBeenCalled()
+  })
+
+  it('merges into a commented JSONC config and writes strict JSON', async () => {
+    fs.exists.mockImplementation(async (path: string) => path === CONFIG_PATH)
+    fs.readTextFile.mockResolvedValue(jsoncFixture)
+
+    const outcome = await writeProviderConfig(API_KEY)
+
+    expect(outcome).toMatchObject({ ok: true, changed: true, backupCreated: true })
+    const written = fs.writeTextFile.mock.calls[0][1] as string
+    expect(() => JSON.parse(written)).not.toThrow()
+    expect(JSON.parse(written)).toMatchObject({
+      theme: 'dark',
+      providers: { local: { name: 'Local' }, [PROVIDER_ID]: expect.anything() },
+    })
   })
 
   it('never overwrites an unparsable config', async () => {

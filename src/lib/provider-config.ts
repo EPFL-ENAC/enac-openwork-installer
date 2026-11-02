@@ -49,6 +49,62 @@ const isObject = (value: unknown): value is JsonObject =>
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 
+/** Index of the first non-whitespace, non-comment character at or after `start`. */
+const skipTrivia = (text: string, start: number): number => {
+  let i = start
+  for (;;) {
+    while (i < text.length && /\s/.test(text[i])) i++
+    if (text[i] === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++
+      continue
+    }
+    if (text[i] === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2)
+      i = end === -1 ? text.length : end + 2
+      continue
+    }
+    return i
+  }
+}
+
+/**
+ * Removes JSONC comments and trailing commas so that `JSON.parse` accepts the text.
+ * OpenCode officially supports JSONC in opencode.json, so a hand-edited file can hold both.
+ */
+export function stripJsonc(text: string): string {
+  let out = ''
+  let i = 0
+  while (i < text.length) {
+    const ch = text[i]
+    if (ch === '"') {
+      let end = i + 1
+      while (end < text.length && text[end] !== '"') end += text[end] === '\\' ? 2 : 1
+      out += text.slice(i, end + 1)
+      i = end + 1
+      continue
+    }
+    if (ch === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++
+      continue
+    }
+    if (ch === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2)
+      i = end === -1 ? text.length : end + 2
+      continue
+    }
+    if (ch === ',') {
+      const next = skipTrivia(text, i + 1)
+      if (text[next] === '}' || text[next] === ']') {
+        i++
+        continue
+      }
+    }
+    out += ch
+    i++
+  }
+  return out
+}
+
 export const displayPath = (path: string, platform = currentPlatform()): string =>
   /windows/i.test(platform) ? `%USERPROFILE%\\${path.replaceAll('/', '\\')}` : `~/${path}`
 
@@ -89,7 +145,7 @@ export async function writeProviderConfig(apiKey: string): Promise<WriteOutcome>
     if (raw !== null) {
       let parsed: unknown
       try {
-        parsed = JSON.parse(raw)
+        parsed = JSON.parse(stripJsonc(raw))
       } catch (error) {
         return { ok: false, code: 'invalid-json', detail: (error as Error).message }
       }

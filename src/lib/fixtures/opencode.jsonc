@@ -1,0 +1,9 @@
+{
+  // Hand-edited OpenCode config. JSONC comments and trailing commas are allowed here.
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "dark",
+  /* Keep the local provider next to the RCP one. */
+  "providers": {
+    "local": { "name": "Local" },
+  },
+}
