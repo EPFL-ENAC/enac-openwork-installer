@@ -189,7 +189,10 @@ async fn install_into(
             let entries = parse_latest_yml(&util::fetch_text(client, &published.url).await?);
             match expected_sha512(&entries, &asset.name) {
                 Some(expected) => verify_file_sha512(&installer, expected)?,
-                None => log.log(format!("{} lists no sha512 for this asset, skipped", metadata)),
+                None => log.log(format!(
+                    "{} lists no sha512 for this asset, skipped",
+                    metadata
+                )),
             }
         }
         None => log.log(format!("the release holds no {metadata}, checksum skipped")),
@@ -246,7 +249,12 @@ async fn install_dmg(dmg: &Path, log: &Logger) -> Result<(), AppError> {
     };
 
     log.log("detaching the disk image");
-    let _ = util::run(Path::new("hdiutil"), &["detach", &mount_path, "-quiet"], SHORT_TIMEOUT).await;
+    let _ = util::run(
+        Path::new("hdiutil"),
+        &["detach", &mount_path, "-quiet"],
+        SHORT_TIMEOUT,
+    )
+    .await;
     util::remove_dir(&mount);
     copied
 }
@@ -321,10 +329,15 @@ pub fn windows_status_from(
     programs_dir: Option<&Path>,
     entries: &[UninstallEntry],
 ) -> Option<InstallStatus> {
-    let entry = entries.iter().find(|entry| is_openwork_uninstall_entry(entry));
+    let entry = entries
+        .iter()
+        .find(|entry| is_openwork_uninstall_entry(entry));
     if let Some(exe) = programs_dir.map(|dir| dir.join(OPENWORK_PROGRAMS_DIR).join(OPENWORK_EXE)) {
         if exe.is_file() {
-            return Some(installed_at(&exe, entry.and_then(|entry| entry.version.clone())));
+            return Some(installed_at(
+                &exe,
+                entry.and_then(|entry| entry.version.clone()),
+            ));
         }
     }
     let dir = entry?.install_location.as_deref().map(str::trim)?;
@@ -354,9 +367,10 @@ fn windows_status() -> Option<InstallStatus> {
 #[cfg(windows)]
 fn registry_entries() -> Vec<UninstallEntry> {
     use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
-    let Ok(uninstall) = winreg::RegKey::predef(HKEY_CURRENT_USER)
-        .open_subkey_with_flags(r"Software\Microsoft\Windows\CurrentVersion\Uninstall", KEY_READ)
-    else {
+    let Ok(uninstall) = winreg::RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(
+        r"Software\Microsoft\Windows\CurrentVersion\Uninstall",
+        KEY_READ,
+    ) else {
         return Vec::new();
     };
     uninstall
@@ -1068,6 +1082,14 @@ fn write_runtime_rows(db: &Path, writes: &[RuntimeRowWrite], now: i64) -> Result
     }
     let mut connection = rusqlite::Connection::open(db)
         .map_err(|e| AppError::io(format!("cannot create {}: {e}", db.display())))?;
+    // The rows carry the literal RCP key, so the database must be owner-only
+    // whether we just created it or OpenWork left it group-readable.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(db, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| AppError::io(format!("cannot restrict {}: {e}", db.display())))?;
+    }
     connection
         .busy_timeout(std::time::Duration::from_secs(5))
         .map_err(|e| AppError::io(format!("cannot wait for {}: {e}", db.display())))?;
@@ -1188,9 +1210,8 @@ fn resolve_default_workspace(
 fn merge_workspace_config(workspace_dir: &Path) -> Result<bool, AppError> {
     let path = workspace_dir.join(WORKSPACE_CONFIG_FILE);
     let existing = match std::fs::read_to_string(&path) {
-        Ok(text) => serde_json::from_str::<serde_json::Value>(&text).unwrap_or_else(|_| {
-            serde_json::Value::String(text) // sentinel: not plain JSON
-        }),
+        Ok(text) => serde_json::from_str::<serde_json::Value>(&text)
+            .unwrap_or(serde_json::Value::String(text)), // sentinel: not plain JSON
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => serde_json::json!({}),
         Err(error) => {
             return Err(AppError::io(format!(
@@ -1426,7 +1447,9 @@ mod tests {
     use std::path::PathBuf;
 
     fn fixture(name: &str) -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures").join(name)
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures")
+            .join(name)
     }
 
     fn release() -> Release {
@@ -1469,10 +1492,8 @@ mod tests {
     }
 
     fn scratch(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "openwork-detect-{}-{tag}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("openwork-detect-{}-{tag}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -1541,9 +1562,10 @@ mod tests {
             entry: UninstallEntry,
             expected: bool,
         }
-        let cases: Vec<Case> =
-            serde_json::from_str(&std::fs::read_to_string(fixture("openwork-uninstall-entries.json")).unwrap())
-                .unwrap();
+        let cases: Vec<Case> = serde_json::from_str(
+            &std::fs::read_to_string(fixture("openwork-uninstall-entries.json")).unwrap(),
+        )
+        .unwrap();
         assert!(cases.iter().any(|case| case.expected));
         for case in &cases {
             assert_eq!(
@@ -1611,9 +1633,18 @@ mod tests {
         let pick = |platform, arch| {
             select_asset(&release.assets, platform, arch).map(|asset| asset.name.as_str())
         };
-        assert_eq!(pick("macos", "aarch64"), Some("openwork-mac-arm64-0.18.63.dmg"));
-        assert_eq!(pick("macos", "x86_64"), Some("openwork-mac-x64-0.18.63.dmg"));
-        assert_eq!(pick("windows", "x86_64"), Some("openwork-win-x64-0.18.63.exe"));
+        assert_eq!(
+            pick("macos", "aarch64"),
+            Some("openwork-mac-arm64-0.18.63.dmg")
+        );
+        assert_eq!(
+            pick("macos", "x86_64"),
+            Some("openwork-mac-x64-0.18.63.dmg")
+        );
+        assert_eq!(
+            pick("windows", "x86_64"),
+            Some("openwork-win-x64-0.18.63.exe")
+        );
         assert_eq!(pick("windows", "aarch64"), None);
         assert_eq!(
             pick("linux", "x86_64"),
@@ -1653,9 +1684,8 @@ mod tests {
 
     #[test]
     fn parses_the_electron_builder_update_metadata() {
-        let win = parse_latest_yml(
-            &std::fs::read_to_string(fixture("openwork-latest.yml")).unwrap(),
-        );
+        let win =
+            parse_latest_yml(&std::fs::read_to_string(fixture("openwork-latest.yml")).unwrap());
         assert_eq!(
             win,
             vec![
@@ -1670,9 +1700,8 @@ mod tests {
             ]
         );
 
-        let mac = parse_latest_yml(
-            &std::fs::read_to_string(fixture("openwork-latest-mac.yml")).unwrap(),
-        );
+        let mac =
+            parse_latest_yml(&std::fs::read_to_string(fixture("openwork-latest-mac.yml")).unwrap());
         assert_eq!(mac.len(), 4);
         assert_eq!(
             expected_sha512(&mac, "openwork-mac-x64-0.18.63.dmg"),
@@ -2251,17 +2280,19 @@ mod tests {
                 .unwrap();
         assert_eq!(env["variables"][0]["key"], OPENWORK_ENV_KEY);
         assert_eq!(env["variables"][0]["value"], "test-token");
+        let db = config_dir.join("runtime.sqlite");
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt as _;
-            let mode = std::fs::metadata(config_dir.join("env.json"))
+            let env_mode = std::fs::metadata(config_dir.join("env.json"))
                 .unwrap()
                 .permissions()
                 .mode();
-            assert_eq!(mode & 0o777, 0o600);
+            assert_eq!(env_mode & 0o777, 0o600);
+            let db_mode = std::fs::metadata(&db).unwrap().permissions().mode();
+            assert_eq!(db_mode & 0o777, 0o600);
         }
 
-        let db = config_dir.join("runtime.sqlite");
         let runtime: serde_json::Value =
             serde_json::from_str(&runtime_config_json(&db, "__openwork_engine_global__").unwrap())
                 .unwrap();
@@ -2365,6 +2396,12 @@ mod tests {
         assert!(outcome.default_model_written);
 
         let db = config_dir.join("runtime.sqlite");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let db_mode = std::fs::metadata(&db).unwrap().permissions().mode();
+            assert_eq!(db_mode & 0o777, 0o600);
+        }
         let runtime: serde_json::Value =
             serde_json::from_str(&runtime_config_json(&db, "__openwork_engine_global__").unwrap())
                 .unwrap();
