@@ -36,11 +36,7 @@ const errorText = computed(() => {
   <section :class="['step-card', `step-card-${status}`]" :aria-busy="busy ? 'true' : undefined">
     <header class="card-head">
       <h2 class="card-title">
-        <span
-          v-if="active"
-          :class="['step-mark', paused ? 'step-mark-paused' : 'step-spin']"
-          aria-hidden="true"
-        />
+        <span v-if="active && !paused" class="step-spin" aria-hidden="true" />
         {{ t(`stepTitles.${id}`) }}
       </h2>
       <span :class="['card-status', `card-status-${status}`]">
@@ -95,7 +91,6 @@ const errorText = computed(() => {
 }
 
 .step-card-running {
-  border-left-width: 2px;
   border-left-color: var(--epfl-red);
 }
 
@@ -134,24 +129,14 @@ const errorText = computed(() => {
   font-size: var(--fs-h5);
 }
 
-.step-mark {
-  flex: none;
-}
-
 .step-spin {
+  flex: none;
   width: 0.75rem;
   height: 0.75rem;
   border: 2px solid var(--epfl-red);
   border-top-color: transparent;
   border-radius: var(--radius-pill);
   animation: step-turn 0.9s linear infinite;
-}
-
-.step-mark-paused {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: var(--radius-pill);
-  background: var(--fg-muted);
 }
 
 @keyframes step-turn {

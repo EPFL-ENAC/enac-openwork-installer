@@ -74,7 +74,7 @@ describe('RunView progress bar', () => {
     expect(markup).toContain('aria-valuenow="2"')
     expect(markup).toContain('Step 3 of 4')
     expect(count(markup, 'run-progress-seg')).toBe(4)
-    expect(count(markup, 'is-done')).toBe(2)
+    expect(count(markup, 'is-done')).toBe(3)
   })
 
   it('starts at the first step with nothing done', async () => {
@@ -84,7 +84,7 @@ describe('RunView progress bar', () => {
 
     expect(markup).toContain('aria-valuenow="0"')
     expect(markup).toContain('Step 1 of 4')
-    expect(count(markup, 'is-done')).toBe(0)
+    expect(count(markup, 'is-done')).toBe(1)
   })
 
   it('counts a skipped step as done', async () => {
@@ -112,11 +112,12 @@ const styleBlock = (css: string, selector: string): string => {
 }
 
 describe('RunView progress colours', () => {
-  it('renders the whole bar solid red at every step', async () => {
+  it('paints done and current segments red and future segments grey', async () => {
     const css = await source()
 
-    expect(styleBlock(css, '.run-progress {')).toContain('var(--epfl-red)')
-    expect(css).not.toContain('var(--border-subtle)')
+    expect(styleBlock(css, '.run-progress-seg.')).toContain('var(--epfl-red)')
+    expect(styleBlock(css, '.run-progress-seg {')).toContain('var(--border-subtle)')
+    expect(styleBlock(css, '.run-progress {')).not.toContain('var(--epfl-red)')
   })
 })
 

@@ -97,7 +97,7 @@ describe('StepCard activity mark', () => {
     const markup = await render('', 'rcpKey', true)
 
     expect(markup).not.toContain('step-spin')
-    expect(markup).toContain('step-mark-paused')
+    expect(markup).not.toContain('step-mark')
     expect(markup).toContain('Waiting for you')
     expect(markup).not.toContain('aria-busy')
   })
@@ -149,7 +149,8 @@ describe('StepCard status palette', () => {
     const css = await source()
 
     expect(styleBlock(css, '.step-card-running')).toContain('var(--epfl-red)')
-    expect(styleBlock(css, '.step-card-running')).toContain('border-left-width: 2px')
+    expect(styleBlock(css, '.step-card-running')).not.toContain('border-left-width')
+    expect(styleBlock(css, '.step-card {')).toContain('border-left-width: 0.25rem')
     expect(styleBlock(css, '.step-card-running .card-title')).toContain('var(--epfl-red)')
     expect(styleBlock(css, '.step-spin')).toContain('var(--epfl-red)')
   })

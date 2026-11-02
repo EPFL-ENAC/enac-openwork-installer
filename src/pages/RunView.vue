@@ -63,7 +63,7 @@ const detailOf = (id: StepId): string | undefined => {
           <span
             v-for="(id, index) in SEQUENCE"
             :key="id"
-            :class="['run-progress-seg', { 'is-done': index < done }]"
+            :class="['run-progress-seg', { 'is-done': index <= done }]"
           />
         </div>
       </header>
@@ -141,7 +141,7 @@ const detailOf = (id: StepId): string | undefined => {
   color: var(--fg-muted);
 }
 
-/* The one designed element: one solid red bar under the title. */
+/* The one designed element: one segment per step, red up to the current step. */
 .run-progress {
   display: flex;
   gap: 2px;
@@ -149,11 +149,16 @@ const detailOf = (id: StepId): string | undefined => {
   margin-top: var(--space-2);
   border-radius: var(--radius);
   overflow: hidden;
-  background: var(--epfl-red);
+  background: var(--border-subtle);
 }
 
 .run-progress-seg {
   flex: 1;
+  background: var(--border-subtle);
+}
+
+.run-progress-seg.is-done {
+  background: var(--epfl-red);
 }
 
 .run-trace {
