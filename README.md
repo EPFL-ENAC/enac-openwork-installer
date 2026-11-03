@@ -68,7 +68,8 @@ If FUSE is not available on the machine, run the AppImage with `--appimage-extra
    ```
 
 4. The `Release` workflow builds all four platforms and publishes the GitHub Release.
-5. After the workflow succeeds, verify that the release contains the portable `.exe`, the `.dmg` and the two `.AppImage` files.
+5. After the workflow succeeds, verify that the release contains the portable `.exe`, the `.dmg`, the two `.AppImage` files, `install.sh` and `SHA256SUMS`.
+6. The same workflow publishes the download page at https://epfl-enac.github.io/enac-openwork-installer/. Enable Pages once in the repository settings, with "GitHub Actions" as the source.
 
 
 ## Development

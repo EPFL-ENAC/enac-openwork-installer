@@ -94,3 +94,59 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "$GITHUB_REF_NAME" src-cli/install.sh --clobber --repo "$GITHUB_REPOSITORY"
+
+  checksums:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish SHA256SUMS for every release asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          assets="$RUNNER_TEMP/assets"
+          mkdir -p "$assets"
+          gh release download "$GITHUB_REF_NAME" --dir "$assets" --clobber --repo "$GITHUB_REPOSITORY"
+          rm -f "$assets/SHA256SUMS"
+          ( cd "$assets" && sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS" )
+          gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/SHA256SUMS" --clobber --repo "$GITHUB_REPOSITORY"
+
+  # The asset names embed the build version and the tag does not, so the page is
+  # patched from the release metadata after every asset exists.
+  deploy-pages:
+    needs: [release, checksums]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the release tag and asset names
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release view "$GITHUB_REF_NAME" --json tagName,assets > "$RUNNER_TEMP/release.json"
+
+      - name: Patch the download page
+        shell: bash
+        run: node scripts/patch-pages.mjs "$RUNNER_TEMP/release.json" pages/index.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+
+      - id: pages
+        uses: actions/deploy-pages@v4

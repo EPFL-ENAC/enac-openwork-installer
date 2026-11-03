@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EPFL OpenWork Installer</title>
+    <meta
+      name="description"
+      content="Download the EPFL OpenWork Installer for Windows, macOS or Linux."
+    />
+    <style>
+      /* Token layer: the only place raw values live. Values from
+         src/css/epfl-tokens.css (EPFL elements charte graphique). */
+      :root {
+        --red: #ff0000;
+        --red-dark: #b51f1f;
+        --red-active: #871717;
+        --white: #ffffff;
+        --gray-100: #e6e6e6;
+        --gray-200: #d5d5d5;
+        --gray-300: #c1c1c1;
+        --gray-500: #8e8e8e;
+        --gray-600: #707070;
+        --black: #212121;
+        --subtle: #f5f5f5;
+
+        --bg: var(--white);
+        --bg-subtle: var(--subtle);
+        --fg: var(--black);
+        --fg-muted: var(--gray-600);
+        --border: var(--gray-200);
+        --border-strong: var(--gray-500);
+        --primary: var(--red);
+        --primary-hover: var(--red-dark);
+        --primary-active: var(--red-active);
+        --on-primary: var(--white);
+
+        --font-sans: Arial, "Helvetica Neue", Helvetica, sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas,
+          monospace;
+
+        --fs-h1: 2.5625rem;
+        --fs-h3: 1.5rem;
+        --fs-h4: 1.25rem;
+        --fs-lead: 1.0625rem;
+        --fs-body: 0.9375rem;
+        --fs-sm: 0.8125rem;
+
+        --space-1: 0.25rem;
+        --space-2: 0.5rem;
+        --space-3: 1rem;
+        --space-4: 1.5rem;
+        --space-5: 3rem;
+        --space-6: 5rem;
+
+        --radius: 2px;
+        --radius-lg: 4px;
+        --border-w: 1px;
+        --focus-w: 2px;
+        --t-fast: 0.15s ease-in-out;
+        --measure: 38rem;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        font-size: 100%;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-sans);
+        font-size: var(--fs-body);
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .wrap {
+        width: 100%;
+        max-width: var(--measure);
+        margin: 0 auto;
+        padding: 0 var(--space-4);
+      }
+
+      a {
+        color: var(--fg);
+        text-decoration: underline;
+        text-decoration-thickness: var(--border-w);
+        text-underline-offset: 0.2em;
+        transition: color var(--t-fast);
+      }
+
+      a:hover {
+        color: var(--primary);
+      }
+
+      :focus-visible {
+        outline: var(--focus-w) solid var(--fg);
+        outline-offset: var(--focus-w);
+      }
+
+      h1,
+      h2,
+      h3,
+      p,
+      pre {
+        margin: 0;
+      }
+
+      /* Masthead: text wordmark only. */
+      .masthead {
+        border-bottom: var(--border-w) solid var(--border);
+      }
+
+      .masthead .wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-3);
+        align-items: baseline;
+        justify-content: space-between;
+        padding-top: var(--space-3);
+        padding-bottom: var(--space-3);
+      }
+
+      .wordmark {
+        font-weight: 700;
+        letter-spacing: 0.01em;
+      }
+
+      .wordmark span {
+        font-weight: 400;
+        color: var(--fg-muted);
+      }
+
+      .lang {
+        display: flex;
+        gap: var(--space-1);
+      }
+
+      .lang button {
+        padding: var(--space-1) var(--space-2);
+        border: var(--border-w) solid transparent;
+        border-radius: var(--radius);
+        background: none;
+        color: var(--fg-muted);
+        font: inherit;
+        font-size: var(--fs-sm);
+        cursor: pointer;
+        transition: var(--t-fast);
+      }
+
+      .lang button:hover {
+        color: var(--fg);
+      }
+
+      .lang button[aria-pressed="true"] {
+        border-color: var(--border);
+        color: var(--fg);
+      }
+
+      .lang button[aria-pressed="false"]:hover {
+        border-color: var(--border);
+      }
+
+      main {
+        padding-top: var(--space-5);
+        padding-bottom: var(--space-6);
+      }
+
+      .intro h1 {
+        font-size: var(--fs-h1);
+        line-height: 1.1;
+        font-weight: 700;
+        text-wrap: balance;
+      }
+
+      .lead {
+        max-width: 34rem;
+        margin-top: var(--space-3);
+        font-size: var(--fs-lead);
+        color: var(--fg-muted);
+      }
+
+      .release {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        margin-top: var(--space-3);
+        font-size: var(--fs-sm);
+        color: var(--fg-muted);
+      }
+
+      .release [data-release-version] {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+        color: var(--fg);
+      }
+
+      /* The one designed element: the platform switcher. */
+      .tabs {
+        display: flex;
+        gap: var(--space-4);
+        margin-top: var(--space-5);
+        border-bottom: var(--border-w) solid var(--border);
+      }
+
+      .tabs button {
+        position: relative;
+        padding: var(--space-2) 0;
+        border: 0;
+        background: none;
+        color: var(--fg-muted);
+        font: inherit;
+        font-weight: 400;
+        cursor: pointer;
+        transition: color var(--t-fast);
+      }
+
+      .tabs button:hover {
+        color: var(--fg);
+      }
+
+      .tabs button[aria-selected="true"] {
+        color: var(--fg);
+        font-weight: 700;
+      }
+
+      .tabs button[aria-selected="true"]::after {
+        content: "";
+        position: absolute;
+        inset: auto 0 -1px 0;
+        height: 3px;
+        background: var(--primary);
+      }
+
+      .panel {
+        padding-top: var(--space-4);
+      }
+
+      .panel + .panel {
+        margin-top: var(--space-5);
+        padding-top: var(--space-5);
+        border-top: var(--border-w) solid var(--border);
+      }
+
+      /* The stacked no-script view needs the separators, the tabbed view does
+         not: the adjacent-sibling rule would also space the only shown panel. */
+      .js-on .panel + .panel {
+        margin-top: 0;
+        padding-top: var(--space-4);
+        border-top: 0;
+      }
+
+      .panel h2 {
+        font-size: var(--fs-h3);
+        font-weight: 700;
+      }
+
+      /* Without the script every panel stacks, so no panel heading is needed
+         twice: in the tabbed view the tab itself names the panel. */
+      .js-on .panel h2 {
+        display: none;
+      }
+
+      .panel h2 + * {
+        margin-top: var(--space-3);
+      }
+
+      .btn {
+        display: inline-block;
+        padding: var(--space-2) var(--space-4);
+        border: var(--border-w) solid var(--primary);
+        border-radius: var(--radius);
+        background: var(--primary);
+        color: var(--on-primary);
+        font-weight: 700;
+        text-decoration: none;
+        transition: background var(--t-fast), border-color var(--t-fast);
+      }
+
+      .btn:hover {
+        border-color: var(--primary-hover);
+        background: var(--primary-hover);
+        color: var(--on-primary);
+      }
+
+      .btn:active {
+        border-color: var(--primary-active);
+        background: var(--primary-active);
+      }
+
+      .btn:focus-visible {
+        outline-color: var(--primary-active);
+      }
+
+      .alternate {
+        display: block;
+        margin-top: var(--space-3);
+        font-size: var(--fs-sm);
+      }
+
+      .note {
+        margin-top: var(--space-3);
+        font-size: var(--fs-sm);
+        color: var(--fg-muted);
+      }
+
+      .terminal {
+        margin-top: var(--space-4);
+      }
+
+      .terminal h3 {
+        font-size: var(--fs-h4);
+        font-weight: 400;
+      }
+
+      .code {
+        display: flex;
+        flex-direction: column;
+        margin-top: var(--space-2);
+        border: var(--border-w) solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--bg-subtle);
+      }
+
+      .code pre {
+        padding: var(--space-3);
+        font-family: var(--font-mono);
+        font-size: var(--fs-sm);
+        line-height: 1.6;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .code button {
+        align-self: flex-start;
+        margin: 0 var(--space-3) var(--space-3);
+        padding: var(--space-1) var(--space-2);
+        border: var(--border-w) solid var(--border-strong);
+        border-radius: var(--radius);
+        background: var(--bg);
+        color: var(--fg);
+        font: inherit;
+        font-size: var(--fs-sm);
+        cursor: pointer;
+        transition: var(--t-fast);
+      }
+
+      .code button:hover {
+        border-color: var(--fg);
+      }
+
+      .code button[data-copied="true"] {
+        border-color: var(--primary);
+        color: var(--primary);
+      }
+
+      .verify {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1) var(--space-3);
+        margin-top: var(--space-5);
+        padding-top: var(--space-4);
+        border-top: var(--border-w) solid var(--border);
+        font-size: var(--fs-sm);
+        color: var(--fg-muted);
+      }
+
+      footer {
+        padding: var(--space-4) 0 var(--space-5);
+        border-top: var(--border-w) solid var(--border);
+        font-size: var(--fs-sm);
+        color: var(--fg-muted);
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      @media (max-width: 30rem) {
+        :root {
+          --fs-h1: 1.6875rem;
+        }
+
+        .btn {
+          display: block;
+          text-align: center;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="wrap">
+        <p class="wordmark">EPFL <span>OpenWork Installer</span></p>
+        <div class="lang" role="group" aria-label="Language">
+          <button type="button" data-lang="en" aria-pressed="true">EN</button>
+          <button type="button" data-lang="fr" aria-pressed="false">FR</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <div class="intro">
+        <h1 data-i18n="title">Install OpenWork with EPFL AI</h1>
+        <p class="lead" data-i18n="lead">
+          The installer creates your RCP API key, installs OpenCode and OpenWork, and
+          connects them to the EPFL inference service.
+        </p>
+        <p class="release">
+          <span data-i18n="release">Latest release</span>
+          <span data-release-version>0.1.0</span>
+        </p>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Platform" hidden>
+        <button
+          type="button"
+          role="tab"
+          id="tab-windows"
+          aria-controls="panel-windows"
+          aria-selected="true"
+          tabindex="0"
+        >
+          Windows
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-macos"
+          aria-controls="panel-macos"
+          aria-selected="false"
+          tabindex="-1"
+        >
+          macOS
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-linux"
+          aria-controls="panel-linux"
+          aria-selected="false"
+          tabindex="-1"
+        >
+          Linux
+        </button>
+      </div>
+
+      <section class="panel" id="panel-windows" data-os="windows">
+        <h2>Windows</h2>
+        <a
+          class="btn"
+          data-asset="windows"
+          href="https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/EPFL%20OpenWork%20Installer_0.1.0_x64.exe"
+          data-i18n="download-windows"
+          >Download for Windows</a
+        >
+        <p class="note" data-i18n="note-windows">
+          Portable 64-bit .exe, there is nothing to install. The system may warn about
+          an unsigned build, choose "More info" then "Run anyway".
+        </p>
+      </section>
+
+      <section class="panel" id="panel-macos" data-os="macos">
+        <h2>macOS</h2>
+        <a
+          class="btn"
+          data-asset="macos"
+          href="https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/EPFL%20OpenWork%20Installer_0.1.0_universal.dmg"
+          data-i18n="download-macos"
+          >Download for macOS</a
+        >
+        <p class="note" data-i18n="note-macos">
+          Universal .dmg for Apple silicon and Intel. The build is unsigned, so open it
+          from the context menu the first time.
+        </p>
+
+        <div class="terminal">
+          <h3 data-i18n="terminal">Or run it in a terminal</h3>
+          <div class="code">
+            <pre data-command>curl -fsSL https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/install.sh -o install.sh
+bash install.sh</pre>
+            <button type="button" data-copy data-i18n="copy">Copy</button>
+          </div>
+          <p class="note" data-i18n="note-terminal">
+            The shell installer does the same work without a desktop. It is plain bash,
+            it needs curl and sqlite3, and it is safe to run twice.
+          </p>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-linux" data-os="linux">
+        <h2>Linux</h2>
+        <div class="downloads">
+          <a
+            class="btn"
+            data-asset="linux-x64"
+            data-arch="x64"
+            href="https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/EPFL%20OpenWork%20Installer_0.1.0_amd64.AppImage"
+            data-i18n="download-linux-x64"
+            >Download for Linux x64</a
+          >
+          <a
+            class="alternate"
+            data-asset="linux-arm64"
+            data-arch="arm64"
+            href="https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/EPFL%20OpenWork%20Installer_0.1.0_aarch64.AppImage"
+            data-i18n="download-linux-arm64"
+            >Download for Linux arm64</a
+          >
+        </div>
+        <p class="note" data-i18n="note-linux">
+          The AppImage needs libwebkit2gtk-4.1-0 and libfuse2 (libfuse2t64 on Ubuntu
+          24.04 and Debian 13). Make the file executable, then run it.
+        </p>
+
+        <div class="terminal">
+          <h3 data-i18n="terminal">Or run it in a terminal</h3>
+          <div class="code">
+            <pre data-command>curl -fsSL https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/install.sh -o install.sh
+bash install.sh</pre>
+            <button type="button" data-copy data-i18n="copy">Copy</button>
+          </div>
+          <p class="note" data-i18n="note-terminal">
+            The shell installer does the same work without a desktop. It is plain bash,
+            it needs curl and sqlite3, and it is safe to run twice.
+          </p>
+        </div>
+      </section>
+
+      <p class="verify">
+        <span data-i18n="verify">Check the download with</span>
+        <a
+          href="https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/SHA256SUMS"
+          >SHA256SUMS</a
+        >
+        <a href="https://github.com/EPFL-ENAC/enac-openwork-installer/releases"
+          data-i18n="all-releases"
+          >All releases</a
+        >
+      </p>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <span data-i18n="footer"
+          >EPFL ENAC IT4R. The installer and its script are published from the
+          EPFL-ENAC repository on GitHub.</span
+        >
+      </div>
+    </footer>
+
+    <script>
+      ;(function () {
+        var root = document.documentElement
+        var tablist = document.querySelector('[role="tablist"]')
+        var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'))
+        var panels = Array.prototype.slice.call(document.querySelectorAll('.panel'))
+
+        var FR = {
+          title: "Installez OpenWork avec l'IA de l'EPFL",
+          lead:
+            "L'installateur crée votre clé d'API RCP, installe OpenCode et OpenWork, " +
+            "puis les connecte au service d'inférence de l'EPFL.",
+          release: 'Dernière version',
+          'download-windows': 'Télécharger pour Windows',
+          'note-windows':
+            'Fichier .exe 64 bits portable, rien à installer. Le système peut ' +
+            'signaler une version non signée, choisissez « Informations ' +
+            "complémentaires » puis « Exécuter quand même ».",
+          'download-macos': 'Télécharger pour macOS',
+          'note-macos':
+            'Fichier .dmg universel pour Apple silicon et Intel. La version n\'est ' +
+            'pas signée, ouvrez-la par le menu contextuel la première fois.',
+          terminal: 'Ou lancez-le dans un terminal',
+          copy: 'Copier',
+          'note-terminal':
+            'Le script shell fait le même travail sans interface graphique. ' +
+            "C'est du bash simple, il demande curl et sqlite3, et il peut être " +
+            'relancé sans risque.',
+          'download-linux-x64': 'Télécharger pour Linux x64',
+          'download-linux-arm64': 'Télécharger pour Linux arm64',
+          'note-linux':
+            "L'AppImage demande libwebkit2gtk-4.1-0 et libfuse2 (libfuse2t64 sur " +
+            'Ubuntu 24.04 et Debian 13). Rendez le fichier exécutable, puis ' +
+            'lancez-le.',
+          verify: 'Vérifiez le téléchargement avec',
+          'all-releases': 'Toutes les versions',
+          footer:
+            "EPFL ENAC IT4R. L'installateur et son script sont publiés depuis le " +
+            'dépôt EPFL-ENAC sur GitHub.',
+        }
+
+        var text = Array.prototype.slice.call(document.querySelectorAll('[data-i18n]'))
+        var EN = {}
+        text.forEach(function (node) {
+          var key = node.getAttribute('data-i18n')
+          EN[key] = node.textContent.replace(/\s+/g, ' ').trim()
+        })
+
+        var lang = 'en'
+
+        var label = function (key) {
+          return lang === 'fr' && FR[key] ? FR[key] : EN[key] || ''
+        }
+
+        var apply = function (next) {
+          lang = next
+          root.lang = next
+          text.forEach(function (node) {
+            node.textContent = label(node.getAttribute('data-i18n'))
+          })
+          Array.prototype.forEach.call(
+            document.querySelectorAll('[data-lang]'),
+            function (button) {
+              button.setAttribute('aria-pressed', String(button.dataset.lang === next))
+            },
+          )
+        }
+
+        Array.prototype.forEach.call(document.querySelectorAll('[data-lang]'), function (button) {
+          button.addEventListener('click', function () {
+            apply(button.dataset.lang)
+          })
+        })
+
+        var copied = null
+
+        Array.prototype.forEach.call(document.querySelectorAll('[data-copy]'), function (button) {
+          button.addEventListener('click', function () {
+            var block = button.closest('.code')
+            var command = block.querySelector('[data-command]').textContent.trim()
+            var done = function () {
+              button.dataset.copied = 'true'
+              button.textContent = lang === 'fr' ? 'Copié' : 'Copied'
+              clearTimeout(copied)
+              copied = setTimeout(function () {
+                button.dataset.copied = 'false'
+                button.textContent = label('copy')
+              }, 2000)
+            }
+            if (navigator.clipboard) navigator.clipboard.writeText(command).then(done, done)
+            else done()
+          })
+        })
+
+        var select = function (tab, focus) {
+          tabs.forEach(function (other) {
+            var on = other === tab
+            other.setAttribute('aria-selected', String(on))
+            other.tabIndex = on ? 0 : -1
+          })
+          panels.forEach(function (panel) {
+            panel.hidden = panel.id !== tab.getAttribute('aria-controls')
+          })
+          if (focus) tab.focus()
+        }
+
+        tabs.forEach(function (tab, index) {
+          tab.addEventListener('click', function () {
+            select(tab, false)
+          })
+          tab.addEventListener('keydown', function (event) {
+            var step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+            if (!step) return
+            event.preventDefault()
+            select(tabs[(index + step + tabs.length) % tabs.length], true)
+          })
+        })
+
+        var platform = function (hint) {
+          if (/mac|iphone|ipad/i.test(hint)) return 'macos'
+          if (/win/i.test(hint)) return 'windows'
+          if (/linux|android|x11/i.test(hint)) return 'linux'
+          return null
+        }
+
+        var hint =
+          (navigator.userAgentData && navigator.userAgentData.platform) ||
+          navigator.platform ||
+          navigator.userAgent ||
+          ''
+
+        var chosen =
+          platform(hint) || platform(navigator.userAgent || '') || 'windows'
+
+        var arm =
+          /arm|aarch64/i.test(
+            (navigator.userAgentData && navigator.userAgentData.architecture) || '',
+          ) || /aarch64|arm64/i.test(navigator.userAgent || '')
+
+        var linux = document.getElementById('panel-linux')
+        var downloads = linux.querySelector('.downloads')
+        var x64 = downloads.querySelector('[data-arch="x64"]')
+        var arm64 = downloads.querySelector('[data-arch="arm64"]')
+
+        if (arm) {
+          downloads.insertBefore(arm64, x64)
+          arm64.className = 'btn'
+          x64.className = 'alternate'
+        }
+
+        panels.forEach(function (panel) {
+          panel.setAttribute('role', 'tabpanel')
+          panel.setAttribute('aria-labelledby', 'tab-' + panel.dataset.os)
+        })
+
+        root.classList.add('js-on')
+        tablist.hidden = false
+        select(
+          tabs.filter(function (tab) {
+            return tab.getAttribute('aria-controls') === 'panel-' + chosen
+          })[0] || tabs[0],
+          false,
+        )
+      })()
+    </script>
+  </body>
+</html>
