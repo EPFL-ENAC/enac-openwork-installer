@@ -24,12 +24,26 @@ jobs:
             args: "--bundles appimage"
             plain: false
             linux: true
+            container: "ubuntu:22.04"
           - platform: ubuntu-24.04-arm
             args: "--bundles appimage"
             plain: false
             linux: true
+            container: "ubuntu:22.04"
     runs-on: ${{ matrix.platform }}
+    container: ${{ matrix.container }}
     steps:
+      # Runs before checkout: the ubuntu:22.04 image has no git, and the container
+      # pins the glibc floor (2.35) of every library linuxdeploy bundles.
+      - name: Install Linux dependencies in the glibc 2.35 container
+        if: matrix.linux
+        shell: bash
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential ca-certificates curl file git \
+            libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev patchelf pkg-config wget zstd
+          git config --system --add safe.directory "$GITHUB_WORKSPACE"
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -44,18 +58,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
-
-      - name: Install Linux dependencies
-        if: matrix.linux
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2t64
+          key: ${{ matrix.linux && 'glibc-2.35' || '' }}
 
       - run: npm ci
 
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPIMAGE_EXTRACT_AND_RUN: "1"
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "EPFL OpenWork Installer ${{ github.ref_name }}"
@@ -64,3 +74,16 @@ jobs:
           prerelease: false
           uploadPlainBinary: ${{ matrix.plain }}
           args: ${{ matrix.args }}
+
+      - name: Assert the AppImage glibc floor
+        if: matrix.linux
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          appimage=$(find "$GITHUB_WORKSPACE/src-tauri/target/release/bundle/appimage" -name '*.AppImage' -print -quit)
+          test -n "$appimage" || { echo "::error::no AppImage was produced"; exit 1; }
+          chmod +x "$appimage"
+          "$appimage" --appimage-extract > /dev/null
+          webkit=$(find squashfs-root -name 'libwebkit2gtk-4.1.so*' -print -quit)
+          test -n "$webkit" || { echo "::error::linuxdeploy did not bundle webkit2gtk-4.1"; exit 1; }
+          bash "$GITHUB_WORKSPACE/.github/scripts/glibc-floor.sh" squashfs-root
