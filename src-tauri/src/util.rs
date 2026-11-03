@@ -219,6 +219,7 @@ pub async fn run_checked(
 
 pub struct CommandOutput {
     pub success: bool,
+    pub code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
 }
@@ -276,6 +277,7 @@ pub fn run_with_timeout(
     remove_dir(&dir);
     Ok(CommandOutput {
         success: status.success(),
+        code: status.code(),
         stdout,
         stderr,
     })
