@@ -10,6 +10,18 @@ It does the following:
 - Configure OpenWork to use EPFL RCP AIaaS models ("Large" and "Small")
 
 
+## Quick install
+
+The shell installer does everything the desktop installer does, from one command. It works on Linux x64 and arm64, and on macOS:
+
+```sh
+curl -fsSL https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/install.sh -o install.sh
+bash install.sh
+```
+
+The installer is interactive, it needs a terminal. It is safe to run twice, it resumes where it stopped. Review the script before running it: it is plain bash and needs `curl` and `sqlite3`.
+
+
 ## Build matrix
 
 | Platform | Runner | Target | Artifacts |

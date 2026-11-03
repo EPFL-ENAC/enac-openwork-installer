@@ -12,6 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: ShellCheck the install scripts
+        run: shellcheck -S warning src-cli/install.sh src-cli/install-selftest.sh
+
+      - name: Run the installer selftest
+        run: bash src-cli/install-selftest.sh
+
       - name: Install Linux dependencies
         run: |
           sudo apt-get update

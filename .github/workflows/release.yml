@@ -87,3 +87,10 @@ jobs:
           webkit=$(find squashfs-root -name 'libwebkit2gtk-4.1.so*' -print -quit)
           test -n "$webkit" || { echo "::error::linuxdeploy did not bundle webkit2gtk-4.1"; exit 1; }
           bash "$GITHUB_WORKSPACE/.github/scripts/glibc-floor.sh" squashfs-root
+
+      - name: Upload the install script to the release
+        if: matrix.platform == 'ubuntu-latest'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" src-cli/install.sh --clobber --repo "$GITHUB_REPOSITORY"
