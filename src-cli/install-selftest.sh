@@ -303,6 +303,8 @@ openwork_selftest_reset
 write_runtime_rows
 sqlite3 "$DB" "UPDATE runtime_opencode_configs SET config_json = '{\"provider\":\"nope\"}' WHERE workspace_id = '$ENGINE_GLOBAL_ID';"
 assert_fail "non-object provider map aborts" write_runtime_rows
+sqlite3 "$DB" "UPDATE runtime_opencode_configs SET config_json = '{\"provider\":null}' WHERE workspace_id = '$ENGINE_GLOBAL_ID';"
+assert_fail "null provider map aborts" write_runtime_rows
 sqlite3 "$DB" "UPDATE runtime_opencode_configs SET config_json = '[1]' WHERE workspace_id = '$ENGINE_GLOBAL_ID';"
 assert_fail "non-object engine row aborts" write_runtime_rows
 
@@ -353,6 +355,10 @@ printf '"just a string"' > "$CONFDIR/env.json"
 assert_fail "non-object env store aborts" write_env_store sk-tok
 printf '[]' > "$CONFDIR/env.json"
 assert_fail "array env store aborts" write_env_store sk-tok
+printf '{"schemaVersion":1,"updatedAt":1,"variables":"gone"}' > "$CONFDIR/env.json"
+assert_fail "non-array variables aborts" write_env_store sk-tok
+printf '{"schemaVersion":1,"updatedAt":1,"variables":["bare"]}' > "$CONFDIR/env.json"
+assert_fail "non-object variable aborts" write_env_store sk-tok
 
 # 17d. a non-object opencode.json is a hard error
 openwork_selftest_reset
@@ -367,6 +373,13 @@ write_env_store 'sk-tok'
 ORDER=$(sqlite3 :memory: "SELECT group_concat(json_extract(value,'\$.key'), ',') FROM json_each(readfile('$CONFDIR/env.json'),'\$.variables');")
 assert_eq "variables sorted by key" "$ORDER" "EPFL_AIAAS_API_KEY,ZZZ_OLD"
 assert_match "foreign variable kept" "$(grep -c 'ZZZ_OLD' "$CONFDIR/env.json")" '1'
+
+# 18b. a variable entry without a key survives, like merge_env_store
+openwork_selftest_reset
+printf '{"schemaVersion":1,"updatedAt":1,"variables":[{"updatedAt":1,"value":"mystery"},{"key":"ZZZ_OLD","updatedAt":1,"value":"v"}]}' > "$CONFDIR/env.json"
+write_env_store 'sk-tok'
+assert_match "keyless variable kept" "$(grep -c '"value": "mystery"' "$CONFDIR/env.json")" '1'
+assert_match "keyed variable kept beside keyless" "$(grep -c 'ZZZ_OLD' "$CONFDIR/env.json")" '1'
 
 # 19. checksum verify: wrong hash dies, right hash passes
 printf '%s' "$FAKE_BYTES" > "$ST_WORK/blob.bin"

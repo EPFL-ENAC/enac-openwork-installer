@@ -358,7 +358,7 @@ write_opencode_config() {
 
 write_env_store() {
     local token=$1
-    local file raw base cur entry out vars k placed tmp now
+    local file raw base cur entry out vars k vt placed tmp now
     file="$CONFDIR/env.json"
     now=$(now_ms)
     base="{\"schemaVersion\":1,\"updatedAt\":$now,\"variables\":[]}"
@@ -369,6 +369,14 @@ write_env_store() {
         fi
         if [[ $(sqlite3 :memory: "SELECT json_type('$(sqlq "$raw")');") != "object" ]]; then
             die "$file is not a JSON object, fix or remove it and rerun the installer"
+        fi
+        vt=$(sqlite3 :memory: "SELECT json_type('$(sqlq "$raw")','\$.variables');")
+        if [[ -n $vt && $vt != "array" ]]; then
+            die "$file holds no variable list, fix or remove it and rerun the installer"
+        fi
+        if [[ $vt == "array" ]] \
+            && [[ $(sqlite3 :memory: "SELECT count(*) FROM json_each('$(sqlq "$raw")','\$.variables') WHERE json_type(value) IS NULL OR json_type(value) != 'object';") != "0" ]]; then
+            die "$file holds a variable that is not an object, fix or remove it and rerun the installer"
         fi
         base=$raw
         cur=$(sqlite3 :memory: "SELECT json_extract(value,'\$.value') FROM json_each('$(sqlq "$base")','\$.variables') WHERE json_extract(value,'\$.key')='$OPENWORK_ENV_KEY';")
@@ -381,6 +389,8 @@ write_env_store() {
     vars=""
     placed=0
     while IFS=$'\t' read -r k v; do
+        # A missing or null key decodes to an empty k: the entry survives
+        # verbatim, like merge_env_store skipping it.
         [[ -n $k ]] || continue
         k=$(sqlite3 :memory: "SELECT json_extract('$(sqlq "$k")','\$');")
         if [[ $placed -eq 0 && $k == "$OPENWORK_ENV_KEY" ]]; then continue; fi
@@ -389,7 +399,7 @@ write_env_store() {
             placed=1
         fi
         vars+=",$v"
-    done < <(sqlite3 -separator $'\t' :memory: "SELECT json_quote(json_extract(value,'\$.key')), json(value) FROM json_each('$(sqlq "$base")','\$.variables') ORDER BY json_extract(value,'\$.key');") || true
+    done < <(sqlite3 -separator $'\t' :memory: "SELECT CASE WHEN json_type(value,'\$.key') == 'text' THEN json_quote(json_extract(value,'\$.key')) ELSE 'null' END, json(value) FROM json_each('$(sqlq "$base")','\$.variables') ORDER BY json_extract(value,'\$.key');") || true
     if [[ $placed -eq 0 ]]; then vars+=",$entry"; fi
     # json_set over the existing store, so foreign top-level keys and a non-1
     # schemaVersion survive, like merge_env_store mutating the object in place.
@@ -437,7 +447,7 @@ SQL
         ptype=$(jtype_at "$existing" "\$.provider")
         if [[ $ptype == "object" ]]; then
             pm=$(sqlite3 :memory: "SELECT json_set(json_extract('$(sqlq "$existing")','\$.provider'), '\$.\"$OPENWORK_PROVIDER_ID\"', json('$(sqlq "$DEFINITION_JSON")'));")
-        elif [[ -n $ptype && $ptype != "null" ]]; then
+        elif [[ -n $ptype ]]; then
             die "the OpenWork runtime config holds no provider map ($ENGINE_GLOBAL_ID has a non-object provider), remove the row and rerun"
         else
             pm="{\"$OPENWORK_PROVIDER_ID\":$DEFINITION_JSON}"
