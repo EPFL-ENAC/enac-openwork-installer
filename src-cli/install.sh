@@ -18,7 +18,6 @@ PORTAL_KEYS_PAGE="$PORTAL_BASE/aiaas/keys"
 PORTAL_KEYS_API="$PORTAL_BASE/aiaas/api/v1/keys"
 PORTAL_NEW_KEY_MODAL="$PORTAL_BASE/aiaas/modal_key_new"
 PORTAL_SHOW_SECRET="$PORTAL_BASE/aiaas/showsecret"
-PORTAL_HOST="portal.rcp.epfl.ch"
 PORTAL_UA="epfl-openwork-installer-cli"
 
 SCRIPT_TIMEOUT=600
@@ -74,13 +73,18 @@ run_with_timeout() {
     if command -v timeout > /dev/null 2>&1; then
         timeout "$secs" "$@"
     else
-        local pid rc watcher
-        "$@" > /dev/null 2>&1 & pid=$!
+        # Stock macOS has no timeout(1): keep the child's output, the smoke
+        # test and the version probe read it.
+        local pid rc watcher tmp
+        tmp=$(mktemp)
+        "$@" > "$tmp" 2>&1 & pid=$!
         ( sleep "$secs"; kill "$pid" 2> /dev/null ) 2> /dev/null & watcher=$!
         wait "$pid" 2> /dev/null
         rc=$?
         kill "$watcher" 2> /dev/null || true
         wait "$watcher" 2> /dev/null || true
+        cat "$tmp"
+        rm -f "$tmp"
         return "$rc"
     fi
 }
@@ -336,6 +340,9 @@ write_opencode_config() {
         if ! jvalid "$stripped"; then
             die "$file is not valid JSON or JSONC, fix it and rerun the installer"
         fi
+        if [[ $(sqlite3 :memory: "SELECT json_type('$(sqlq "$stripped")');") != "object" ]]; then
+            die "$file is not a JSON object, fix it and rerun the installer"
+        fi
         base=$(sqlite3 :memory: "SELECT json('$(sqlq "$stripped")');")
     fi
     merged=$(merge_oc_config "$base" "$token")
@@ -360,6 +367,9 @@ write_env_store() {
         if ! jvalid "$raw"; then
             die "$file is not valid JSON, fix or remove it and rerun the installer"
         fi
+        if [[ $(sqlite3 :memory: "SELECT json_type('$(sqlq "$raw")');") != "object" ]]; then
+            die "$file is not a JSON object, fix or remove it and rerun the installer"
+        fi
         base=$raw
         cur=$(sqlite3 :memory: "SELECT json_extract(value,'\$.value') FROM json_each('$(sqlq "$base")','\$.variables') WHERE json_extract(value,'\$.key')='$OPENWORK_ENV_KEY';")
         if [[ $cur == "$token" ]]; then
@@ -381,7 +391,11 @@ write_env_store() {
         vars+=",$v"
     done < <(sqlite3 -separator $'\t' :memory: "SELECT json_quote(json_extract(value,'\$.key')), json(value) FROM json_each('$(sqlq "$base")','\$.variables') ORDER BY json_extract(value,'\$.key');") || true
     if [[ $placed -eq 0 ]]; then vars+=",$entry"; fi
-    out="{\"schemaVersion\":1,\"updatedAt\":$now,\"variables\":[${vars#,}]}"
+    # json_set over the existing store, so foreign top-level keys and a non-1
+    # schemaVersion survive, like merge_env_store mutating the object in place.
+    sv=$(sqlite3 :memory: "SELECT CASE WHEN json_type('$(sqlq "$base")','\$.schemaVersion') IN ('integer','real') THEN json_extract('$(sqlq "$base")','\$.schemaVersion') ELSE 1 END;")
+    vars=${vars#,}
+    out=$(sqlite3 :memory: "SELECT json_set('$(sqlq "$base")','\$.schemaVersion',$sv,'\$.updatedAt',$now,'\$.variables', json('[$vars]'));")
     tmp="$file.tmp"
     printf '%s\n' "$(json_pretty "$(json_canonical "$out")")" > "$tmp"
     chmod 600 "$tmp"
@@ -409,7 +423,7 @@ CREATE TABLE IF NOT EXISTS workspace_default_models (workspace_id TEXT PRIMARY K
 SQL
     chmod 600 "$db"
 
-    local existing new dt pm
+    local existing new dt pm ptype
     existing=$(read_config_row "$db" runtime_opencode_configs "$ENGINE_GLOBAL_ID" config_json)
     if [[ -z $existing ]]; then
         new=$ENGINE_GLOBAL_JSON
@@ -417,9 +431,16 @@ SQL
         if ! jvalid "$existing"; then
             die "runtime.sqlite holds a corrupt row for $ENGINE_GLOBAL_ID, remove it and rerun"
         fi
-        pm='{}'
-        if [[ $(jtype_at "$existing" "\$.provider") == "object" ]]; then
+        if [[ $(sqlite3 :memory: "SELECT json_type('$(sqlq "$existing")');") != "object" ]]; then
+            die "the OpenWork runtime config row for $ENGINE_GLOBAL_ID is not a JSON object, remove it and rerun"
+        fi
+        ptype=$(jtype_at "$existing" "\$.provider")
+        if [[ $ptype == "object" ]]; then
             pm=$(sqlite3 :memory: "SELECT json_set(json_extract('$(sqlq "$existing")','\$.provider'), '\$.\"$OPENWORK_PROVIDER_ID\"', json('$(sqlq "$DEFINITION_JSON")'));")
+        elif [[ -n $ptype && $ptype != "null" ]]; then
+            die "the OpenWork runtime config holds no provider map ($ENGINE_GLOBAL_ID has a non-object provider), remove the row and rerun"
+        else
+            pm="{\"$OPENWORK_PROVIDER_ID\":$DEFINITION_JSON}"
         fi
         new=$(sqlite3 :memory: "SELECT json_set('$(sqlq "$existing")','\$.provider', json('$(sqlq "$pm")'));")
         if [[ $(jtype_at "$new" "\$.disabled_providers") != "array" ]]; then
@@ -442,10 +463,14 @@ SQL
     cur=""
     base_own='{}'
     if [[ -n $existing_own ]]; then
-        if jvalid "$existing_own" && [[ $(sqlite3 :memory: "SELECT json_type('$(sqlq "$existing_own")');") == "object" ]]; then
-            base_own=$existing_own
-            cur=$(sqlite3 :memory: "SELECT json_extract('$(sqlq "$base_own")','\$.\"$OPENWORK_PROVIDER_ID\"');")
+        if ! jvalid "$existing_own"; then
+            die "the machine ownership row $MACHINE_OWNERSHIP_ID is not valid JSON, remove it and rerun"
         fi
+        if [[ $(sqlite3 :memory: "SELECT json_type('$(sqlq "$existing_own")');") != "object" ]]; then
+            die "the machine ownership row $MACHINE_OWNERSHIP_ID is not a JSON object, remove it and rerun"
+        fi
+        base_own=$existing_own
+        cur=$(sqlite3 :memory: "SELECT json_extract('$(sqlq "$base_own")','\$.\"$OPENWORK_PROVIDER_ID\"');")
     fi
     if [[ $cur != "$MACHINE_OWNERSHIP_FP" ]]; then
         new_own=$(sqlite3 :memory: "SELECT json_set('$(sqlq "$base_own")','\$.\"$OPENWORK_PROVIDER_ID\"','$MACHINE_OWNERSHIP_FP');")
@@ -481,8 +506,8 @@ heal_workspace_config() {
     if [[ $(sqlite3 :memory: "SELECT count(*) FROM json_each('$(sqlq "$next")','\$.provider');" 2> /dev/null || echo 1) == "0" ]]; then
         next=$(sqlite3 :memory: "SELECT json_remove('$(sqlq "$next")', '\$.provider');")
     fi
-    keys=$(sqlite3 :memory: "SELECT count(*), sum(key != '\$schema') FROM json_each('$(sqlq "$next")');")
-    if [[ $keys == "1|0" ]]; then
+    keys=$(sqlite3 :memory: "SELECT count(*) FROM json_each('$(sqlq "$next")') WHERE key != '\$schema';")
+    if [[ $keys == "0" ]]; then
         rm -f "$file"
         sub "removed $file (only a schema key remained)"
         return 0
@@ -524,7 +549,10 @@ resolve_workspace() {
     if [[ -n $ws_id ]]; then
         entry=$(sqlite3 :memory: "SELECT json_extract(value,'\$.path')||char(9)||COALESCE(json_extract(value,'\$.workspaceType'),'local') FROM json_each('$(sqlq "$state")','\$.workspaces') WHERE json_extract(value,'\$.id')='$ws_id' LIMIT 1;") || true
     fi
-    if [[ -z $ws_id || -z $entry ]]; then
+    if [[ -z $ws_id ]]; then
+        # No usable selection key: fall back to the first local workspace, like
+        # pick_workspace_id. A selected id missing from workspaces[] keeps its
+        # id (path None in resolve_default_workspace), it only skips the heal.
         entry=$(sqlite3 :memory: "SELECT json_extract(value,'\$.id')||char(9)||json_extract(value,'\$.path')||char(9)||COALESCE(json_extract(value,'\$.workspaceType'),'local') FROM json_each('$(sqlq "$state")','\$.workspaces') WHERE COALESCE(json_extract(value,'\$.workspaceType'),'local')='local' LIMIT 1;") || true
         if [[ -n $entry ]]; then
             ws_id=$(printf '%s' "$entry" | cut -f1)
@@ -588,7 +616,8 @@ check_prereqs() {
         || die "the sqlite3 binary lacks JSON support (json1), install a full sqlite3 build"
     [[ $(sqlite3 :memory: "SELECT json('{}') -> '\$';") == "{}" ]] \
         || die "the sqlite3 binary lacks the JSON arrow operator (3.38+), install a newer sqlite3"
-    if [[ $OS == "linux" ]] && ! ldconfig -p 2> /dev/null | grep -q "libfuse.so.2"; then
+    # The GUI stays silent when ldconfig is unavailable; webkit sonames are GUI-only.
+    if [[ $OS == "linux" ]] && command -v ldconfig > /dev/null 2>&1 && ! ldconfig -p 2> /dev/null | grep -q "libfuse.so.2"; then
         warn "libfuse2 is missing, the OpenWork AppImage may need to run with --appimage-extract-and-run"
     fi
     sub "curl, sqlite3 and the browser opener are present"
@@ -683,23 +712,27 @@ install_opencode_fallback() {
 }
 
 repair_opencode_state() {
-    local dir d f stamp
-    if [[ $OS == "macos" ]]; then
-        dir="$HOME/Library/Application Support/opencode"
-    else
-        dir="${XDG_DATA_HOME:-$HOME/.local/share}/opencode"
-    fi
-    [[ -d $dir ]] || return 0
+    local d f stamp probe
+    local -a dirs=()
+    # Same scan set as database_state_dirs: XDG when set, the usual dir, and
+    # the macOS legacy path on every OS (it simply does not exist on Linux).
+    [[ -n ${XDG_DATA_HOME:-} ]] && dirs+=("${XDG_DATA_HOME}/opencode")
+    dirs+=("$HOME/.local/share/opencode" "$HOME/Library/Application Support/opencode")
     stamp=$(date +%s)
-    for f in "$dir"/*.db; do
-        [[ -f $f ]] || continue
-        if ! sqlite3 "$f" "SELECT 1 FROM sqlite_master WHERE type='table' AND name='session';" 2> /dev/null | grep -q 1; then
-            mv "$f" "$f.bak-$stamp"
-            for d in -wal -shm; do
-                [[ -f $f$d ]] && mv "$f$d" "$f$d.bak-$stamp"
-            done
-            sub "backed up the foreign state database $f"
-        fi
+    for d in "${dirs[@]}"; do
+        [[ -d $d ]] || continue
+        for f in "$d"/*.db; do
+            [[ -f $f ]] || continue
+            # Foreign like is_foreign: at least one table, none named session.
+            probe=$(sqlite3 "$f" "SELECT CASE WHEN (SELECT count(*) FROM sqlite_master WHERE type='table') > 0 AND NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='session') THEN 1 ELSE 0 END;" 2> /dev/null || true)
+            if [[ $probe == "1" ]]; then
+                mv "$f" "$f.bak-$stamp"
+                for s in -wal -shm; do
+                    [[ -f $f$s ]] && mv "$f$s" "$f$s.bak-$stamp"
+                done
+                sub "backed up the foreign state database $f"
+            fi
+        done
     done
 }
 
@@ -832,7 +865,7 @@ install_openwork_macos() {
     local prefix="openwork-mac-arm64-"
     [[ $ARCH == "x86_64" ]] && prefix="openwork-mac-x64-"
     download_release_asset "$release" "$prefix" ".dmg" "$tmp/openwork.dmg" > /dev/null
-    hdiutil attach "$tmp/openwork.dmg" -nobrowse -noverify -noautoopen -quiet -mountpoint "$mp" \
+    run_with_timeout "$SHORT_TIMEOUT" hdiutil attach "$tmp/openwork.dmg" -nobrowse -noverify -noautoopen -quiet -mountpoint "$mp" \
         || { rm -rf "$tmp"; die "could not mount the OpenWork disk image"; }
     if [[ ! -d "$mp/OpenWork.app" ]]; then
         hdiutil detach "$mp" -quiet 2> /dev/null || true
@@ -840,7 +873,7 @@ install_openwork_macos() {
         die "the OpenWork disk image holds no OpenWork.app"
     fi
     ditto "$mp/OpenWork.app" "$dest"
-    hdiutil detach "$mp" -quiet 2> /dev/null || true
+    run_with_timeout "$SHORT_TIMEOUT" hdiutil detach "$mp" -quiet 2> /dev/null || true
     rm -rf "$tmp"
     sub "installed OpenWork at $dest"
 }
@@ -860,16 +893,6 @@ probe_session() {
     code=$(curl -sS --max-time "$HTTP_TIMEOUT" -o /dev/null -w '%{http_code}' \
         -H "Cookie: $header" -H "User-Agent: $PORTAL_UA" "$PORTAL_KEYS_PAGE" 2> /dev/null) || return 1
     [[ $code == 2* ]]
-}
-
-session_header_from_jar() {
-    local jar=$1 sid csrf header
-    sid=$(awk -F'\t' '$6 == "sessionid" {v=$7} END {print v}' "$jar" 2> /dev/null || true)
-    csrf=$(awk -F'\t' '$6 == "csrftoken" {v=$7} END {print v}' "$jar" 2> /dev/null || true)
-    [[ -n $sid ]] || return 1
-    header="sessionid=$sid"
-    [[ -n $csrf ]] && header+="; csrftoken=$csrf"
-    printf '%s\n' "$header"
 }
 
 save_session() {
@@ -906,8 +929,7 @@ portal_login() {
     if try_saved_session; then
         return 0
     fi
-    local jar line sid code errs pending pending_ticks deadline
-    jar=$(mktemp)
+    local line sid code errs pending pending_ticks deadline
     say "opening $PORTAL_KEYS_PAGE in your browser"
     if [[ $OS == "macos" ]]; then
         open "$PORTAL_KEYS_PAGE" 2> /dev/null || warn "could not open a browser, open $PORTAL_KEYS_PAGE manually"
@@ -941,9 +963,13 @@ portal_login() {
             else
                 sid=$(extract_pasted_session "$line" || true)
                 if [[ -n $sid ]]; then
-                    if probe_session "sessionid=$sid"; then
-                        SESSION_HEADER="sessionid=$sid"
-                        SESSION_CSRF=$(printf '%s' "$line" | sed -n 's/.*csrftoken[[:space:]]*=[[:space:]]*\([A-Za-z0-9_-]*\).*/\1/p')
+                    local paste_csrf=""
+                    paste_csrf=$(printf '%s' "$line" | sed -n 's/.*csrftoken[[:space:]]*=[[:space:]]*\([A-Za-z0-9_-]*\).*/\1/p')
+                    local paste_header="sessionid=$sid"
+                    [[ -n $paste_csrf ]] && paste_header+="; csrftoken=$paste_csrf"
+                    if probe_session "$paste_header"; then
+                        SESSION_HEADER=$paste_header
+                        SESSION_CSRF=$paste_csrf
                         save_session
                         say "portal session verified (sessionid masked)"
                         __restore_tty
@@ -968,17 +994,11 @@ portal_login() {
                 pending_ticks=0
             fi
         fi
-        code=$(curl -sS -b "$jar" -c "$jar" --max-time "$HTTP_TIMEOUT" -o /dev/null -w '%{http_code}' \
+        # The CLI cannot read the browser cookie store, so this GET is only a
+        # reachability probe; sign-in happens through the pasted values above.
+        code=$(curl -sS --max-time "$HTTP_TIMEOUT" -o /dev/null -w '%{http_code}' \
             -H "User-Agent: $PORTAL_UA" "$PORTAL_KEYS_PAGE" 2> /dev/null) || code=""
-        if [[ $code == 2* ]]; then
-            if SESSION_HEADER=$(session_header_from_jar "$jar"); then
-                SESSION_CSRF=$(awk -F'\t' '$6 == "csrftoken" {v=$7} END {print v}' "$jar" 2> /dev/null || true)
-                save_session
-                say "portal session verified (sessionid masked)"
-                __restore_tty
-                return 0
-            fi
-        elif [[ -z $code ]]; then
+        if [[ -z $code ]]; then
             errs=$((errs + 1))
             if ((errs >= COOKIE_POLL_MAX_ERRORS)); then
                 __restore_tty
@@ -1008,11 +1028,21 @@ ask_yn() {
 }
 
 fetch_keys_json() {
-    local hdr_out="$1"
-    curl -sSL --max-time "$HTTP_TIMEOUT" \
+    local hdr_out="$1" resp code url
+    resp=$(curl -sSL --max-time "$HTTP_TIMEOUT" \
         -H "Cookie: $SESSION_HEADER" -H "Accept: application/json" -H "User-Agent: $PORTAL_UA" \
-        -o "$CONFDIR/.keys.json" -D "$hdr_out" "$PORTAL_KEYS_API" \
+        -o "$CONFDIR/.keys.json" -D "$hdr_out" -w '%{http_code} %{url_effective}' "$PORTAL_KEYS_API") \
         || die "could not list the RCP keys, is the portal session still valid?"
+    code=${resp%% *}
+    url=${resp#* }
+    case $code in
+        401 | 403) die "the portal session is not valid, rerun the installer to sign in again" ;;
+        5*) die "the portal had a server error listing the keys, retry later" ;;
+    esac
+    case $url in
+        "$PORTAL_BASE"/*) : ;;
+        *) die "the portal redirected away from the keys page, sign in again and rerun the installer" ;;
+    esac
     sqlite3 :memory: "SELECT json(readfile('$CONFDIR/.keys.json'));" 2> /dev/null \
         || sqlite3 :memory: "SELECT json('$(sqlq "$(cat "$CONFDIR/.keys.json")")');"
 }
@@ -1025,7 +1055,7 @@ reveal_secret() {
     local key_id=$1 page token
     local hdr=(-H "Cookie: $SESSION_HEADER" -H "Referer: $PORTAL_KEYS_PAGE" -H "HX-Request: true")
     if [[ -n $SESSION_CSRF ]]; then hdr+=(-H "X-CSRFToken: $SESSION_CSRF"); fi
-    page=$(curl -sS --max-time "$HTTP_TIMEOUT" "${hdr[@]}" \
+    page=$(curl -sSL --max-time "$HTTP_TIMEOUT" "${hdr[@]}" \
         --data-urlencode "key=$key_id" "$PORTAL_SHOW_SECRET") || die "could not read the key secret from the portal"
     token=$(printf '%s' "$page" | grep -oE '(^|[^A-Za-z0-9_-])(sk-[A-Za-z0-9_-]+)' | awk '{ v=$0; if (substr(v,1,1) != "s") v=substr(v,2); if (length(v) > 8 && length(v) > m) { m = length(v); t = v } } END { print t }')
     [[ -n $token ]] || die "the portal response held no key secret"
@@ -1045,18 +1075,37 @@ suggest_key_name() {
 }
 
 parse_modal_form() {
-    local html=$1
-    FORM_URL=$(printf '%s' "$html" | tr '\n' ' ' | sed -n 's/.*hx-post="\([^"]*\)".*/\1/p' | head -1)
-    if [[ -z $FORM_URL ]]; then
-        FORM_URL=$(printf '%s' "$html" | tr '\n' ' ' | sed -n 's/.*action="\([^"]*\)".*/\1/p' | head -1)
-    fi
+    local html=$1 tag v u
+    # Form target like form_action: form tags only, hx-post then action, empty
+    # and #-targets skipped. The live modal posts through an htmx footer
+    # button, so no form tag matches and create_key_flow falls back to the
+    # modal's final URL.
+    FORM_URL=""
+    while IFS= read -r tag; do
+        [[ -n $tag ]] || continue
+        for v in hx-post action; do
+            u=$(printf '%s' "$tag" | grep -oE "$v=\"[^\"]*\"" | head -1) || true
+            [[ -n $u ]] || continue
+            u=${u#"$v=\""}
+            u=${u%\"}
+            if [[ -n $u && $u != "#"* ]]; then FORM_URL=$u; break 2; fi
+        done
+    done <<< "$(printf '%s' "$html" | tr '\n' ' ' | grep -oE '<form[^>]*>' || true)"
     [[ -n $FORM_URL ]] && FORM_URL=$(html_unescape "$FORM_URL")
+    # CSRF like csrf_from_document: hidden input value, then the two meta
+    # variants in the same order.
     MODAL_CSRF=$(printf '%s' "$html" | tr '\n' ' ' | sed -n 's/.*name="csrfmiddlewaretoken"[^>]*value="\([^"]*\)".*/\1/p' | head -1)
     if [[ -z $MODAL_CSRF ]]; then
         MODAL_CSRF=$(printf '%s' "$html" | tr '\n' ' ' | sed -n 's/.*name="csrf-token"[^>]*content="\([^"]*\)".*/\1/p' | head -1)
     fi
-    UNITS_TSV=$(printf '%s' "$html" | tr '\n' ' ' \
-        | sed -n 's/.*<select[^>]*name="unit"[^>]*>\(.*\)<\/select>.*/\1/p' \
+    if [[ -z $MODAL_CSRF ]]; then
+        MODAL_CSRF=$(printf '%s' "$html" | tr '\n' ' ' | sed -n 's/.*name="csrfmiddlewaretoken"[^>]*content="\([^"]*\)".*/\1/p' | head -1)
+    fi
+    # Only the unit select: a greedy capture would leak the pool and usage
+    # options of the sibling selects into the picker.
+    local sel
+    sel=$(printf '%s' "$html" | tr '\n' ' ' | sed 's/.*<select[^>]*name="unit"[^>]*>//; s#</select>.*##')
+    UNITS_TSV=$(printf '%s' "$sel" \
         | grep -oE '<option[^>]*>[^<]*</option>' \
         | sed -E 's/<option[^>]*value="([^"]*)"[^>]*>([^<]*)<.*/\1\t\2/' \
         | awk -F'\t' '$2 != "" && $2 != "---------"' ) || true
@@ -1067,7 +1116,7 @@ create_key_flow() {
     local modal hdr_out form_url csrf name unit uchoice label resp body code final_url
     say "fetching the key creation form from the portal"
     hdr_out=$(mktemp)
-    modal=$(curl -sS --max-time "$HTTP_TIMEOUT" \
+    modal=$(curl -sSL --max-time "$HTTP_TIMEOUT" \
         -H "Cookie: $SESSION_HEADER" -H "Referer: $PORTAL_KEYS_PAGE" -H "User-Agent: $PORTAL_UA" \
         -o "$CONFDIR/.modal.html" -D "$hdr_out" -w '%{url_effective}' "$PORTAL_NEW_KEY_MODAL") \
         || die "could not fetch the key creation form"
@@ -1080,8 +1129,9 @@ create_key_flow() {
         http*) : ;;
         *) form_url="$PORTAL_BASE$form_url" ;;
     esac
-    csrf=$SESSION_CSRF
-    if [[ -z $csrf && -n ${MODAL_CSRF:-} ]]; then csrf=$MODAL_CSRF; fi
+    # Django rotates the token on the form response, so the modal's hidden
+    # field wins over the stale csrftoken cookie.
+    csrf=${MODAL_CSRF:-$SESSION_CSRF}
     [[ -n $csrf ]] || die "the key creation form held no CSRF token"
 
     if [[ $(printf '%s\n' "${UNITS_TSV:-}" | grep -c . || true) -gt 1 ]]; then
@@ -1131,7 +1181,7 @@ create_key_flow() {
             5*) die "the portal had a server error creating the key, retry later" ;;
         esac
         case $final_url in
-            *"$PORTAL_HOST"*) : ;;
+            "$PORTAL_BASE/aiaas"*) : ;;
             *) die "the portal redirected away during key creation, sign in again and rerun" ;;
         esac
         if printf '%s' "$body" | grep -qiE 'errorlist|already exists|invalid'; then
@@ -1142,8 +1192,10 @@ create_key_flow() {
             continue
         fi
         say "key $name created on the portal, reading its secret"
-        keys_json=$(fetch_keys_json "$(mktemp)")
-        REVEAL_KEY_ID=$(sqlite3 :memory: "SELECT json_extract(value,'\$.id') FROM json_each('$(sqlq "$keys_json")') WHERE json_extract(value,'\$.name')='$name' LIMIT 1;")
+        hdr_out=$(mktemp)
+        keys_json=$(fetch_keys_json "$hdr_out")
+        rm -f "$hdr_out"
+        REVEAL_KEY_ID=$(sqlite3 :memory: "SELECT json_extract(value,'\$.id') FROM json_each('$(sqlq "$keys_json")') WHERE json_extract(value,'\$.name')='$name' AND COALESCE(json_extract(value,'\$.is_application'),0) = 0 AND COALESCE(json_extract(value,'\$.is_legacy'),0) = 0 AND COALESCE(json_extract(value,'\$.is_enabled'),0) = 1 AND COALESCE(json_extract(value,'\$.is_pending'),0) = 0 LIMIT 1;")
         [[ -n $REVEAL_KEY_ID && $REVEAL_KEY_ID != "null" ]] || die "the created key $name did not appear in the key list"
         return 0
     done
@@ -1171,6 +1223,8 @@ pick_numbered_list() {
 ask_default_value() {
     local what=$1 default=$2 reply=""
     read -r -p "$what [$default]: " reply || die "aborted"
+    reply=${reply#"${reply%%[![:space:]]*}"}
+    reply=${reply%"${reply##*[![:space:]]}"}
     printf '%s\n' "${reply:-$default}"
 }
 
@@ -1184,7 +1238,6 @@ rcp_key_step() {
     local hdr_out keys_json openwork_id
     hdr_out=$(mktemp)
     keys_json=$(fetch_keys_json "$hdr_out")
-    fresh_csrf_from_headers "$hdr_out"
     rm -f "$hdr_out"
     openwork_id=$(sqlite3 :memory: "SELECT json_extract(value,'\$.id') FROM json_each('$(sqlq "$keys_json")') WHERE json_extract(value,'\$.name')='$DEFAULT_KEY_NAME' AND COALESCE(json_extract(value,'\$.is_application'),0) = 0 AND COALESCE(json_extract(value,'\$.is_legacy'),0) = 0 AND COALESCE(json_extract(value,'\$.is_enabled'),0) = 1 AND COALESCE(json_extract(value,'\$.is_pending'),0) = 0 LIMIT 1;")
     if [[ -n $openwork_id && $openwork_id != "null" ]]; then
@@ -1197,7 +1250,7 @@ rcp_key_step() {
     count=$(printf '%s\n' "$tsv" | grep -c . || true)
     if ((count > 0)); then
         say "existing API keys:"
-        printf '%s\n' "$tsv" | awk -F'\t' '{ p = ($3 == "PREMIUM" || $3 == "premium") ? "premium" : "basic"; print "  " NR ") " $2 " (" p ")" }'
+        printf '%s\n' "$tsv" | awk -F'\t' '{ p = (tolower($3) == "premium") ? "premium" : "basic"; print "  " NR ") " $2 " (" p ")" }'
         say "  n) create a new key"
         local reply
         read -r -p "select a key or n [new]: " reply || die "aborted"
@@ -1225,7 +1278,8 @@ rcp_key_step() {
 
 fresh_csrf_from_headers() {
     local v
-    v=$(grep -i '^set-cookie:.*csrftoken=' "$1" | tail -1 | sed -n 's/^[Ss]et-[Cc]ookie:.*csrftoken=\([^;]*\).*/\1/p' || true)
+    # The first Set-Cookie wins, like the Rust header parse.
+    v=$(grep -i '^set-cookie:.*csrftoken=' "$1" | head -1 | sed -n 's/^[Ss]et-[Cc]ookie:.*csrftoken=\([^;]*\).*/\1/p' || true)
     if [[ -n $v ]]; then SESSION_CSRF=$v; fi
     true
 }
@@ -1240,24 +1294,28 @@ write_provider_config() {
 }
 
 smoke_test() {
-    local bin out rc
+    local bin out errf rc
     if ! bin=$(find_opencode); then
         warn "OpenCode is not installed, run the OpenCode step first"
         return 1
     fi
     say "running the smoke test: $OC_MODEL_PROVIDER answers one prompt"
+    errf=$(mktemp)
     set +e
-    out=$(run_with_timeout "$SMOKE_TIMEOUT" "$bin" run --standalone --model "$OC_MODEL_PROVIDER" "$SMOKE_PROMPT" < /dev/null 2> /dev/null)
+    out=$(run_with_timeout "$SMOKE_TIMEOUT" "$bin" run --standalone --model "$OC_MODEL_PROVIDER" "$SMOKE_PROMPT" < /dev/null 2> "$errf")
     rc=$?
     set -e
     if [[ $rc -eq 0 && -n ${out//[[:space:]]/} ]]; then
         local detail=${out}
         ((${#detail} > 500)) && detail="${detail:0:500}..."
         sub "$OC_MODEL_PROVIDER answered: $detail"
+        rm -f "$errf"
         return 0
     fi
     warn "smoke test failed (exit code $rc)"
-    printf '%s\n' "$out" | grep -v '^[[:space:]]*$' | head -10 | sed 's/^/    /' || true
+    # stderr first, then stdout, like the GUI's meaningful_lines.
+    { cat "$errf"; printf '%s\n' "$out"; } | grep -v '^[[:space:]]*$' | head -10 | sed 's/^/    /' || true
+    rm -f "$errf"
     warn "runtime error, see the output above (auth, model or network)"
     return 1
 }

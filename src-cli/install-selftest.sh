@@ -92,7 +92,7 @@ openwork_mock_curl() {
             if [[ -s $ST_CREATED ]]; then body=$(cat "$ST_KEYS_FILE2"); else body=$(cat "$ST_KEYS_FILE"); fi
             ;;
         *"$PORTAL_KEYS_PAGE") body="" ;;
-        *"$PORTAL_NEW_KEY_MODAL") body='<html><form method="post" action="/aiaas/create_key"><input type="hidden" name="csrfmiddlewaretoken" value="csrfTOKEN123"><select name="unit"><option value="">---------</option><option value="lab1" selected>Lab One</option><option value="lab2">Lab Two</option></select></form></html>' ;;
+        *"$PORTAL_NEW_KEY_MODAL") body='<html><form method="post" action="/aiaas/create_key"><input type="hidden" name="csrfmiddlewaretoken" value="csrfTOKEN123"><select name="unit"><option value="">---------</option><option value="lab1" selected>Lab One</option><option value="lab2">Lab Two</option></select><select name="pool"><option value="BASIC">Basic</option><option value="PREMIUM">Premium</option></select><select name="usage"><option value="PERSONAL">Personal</option><option value="APPLICATION">Application</option></select></form></html>' ;;
         *"/aiaas/create_key")
             body='created'
             printf '1' > "$ST_CREATED"
@@ -242,10 +242,34 @@ assert_match "reveal sent the session cookie" "$(grep -c 'Cookie: sessionid=STUB
 # 12. create_key_flow: modal parse, unit pick, name pick, POST, refreshed list
 openwork_selftest_reset
 SESSION_HEADER="sessionid=STUBSESS"
+SESSION_CSRF="cookieCSRF"
 create_key_flow "$(cat "$ST_KEYS_FILE")" <<< $'1\nOpenWork\n'
 assert_eq "created key id from the refreshed list" "$REVEAL_KEY_ID" "keys_9"
 assert_match "create POST submitted" "$(grep -c 'aiaas/create_key' "$ST_CURL_LOG")" '[1-9]'
 assert_match "create POST carried csrf and pool" "$(grep -c 'pool=BASIC' "$ST_CURL_LOG")" '[1-9]'
+assert_match "modal csrf wins over the session cookie" "$(grep -c 'cookieCSRF' "$ST_CURL_LOG")" '^0$'
+assert_match "unit picker scoped to the unit select" "$(grep -c 'unit=lab1' "$ST_CURL_LOG")" '[1-9]'
+
+# 12b. parse_modal_form scopes options to the unit select and takes the first form target
+openwork_selftest_reset
+parse_modal_form '<html><div hx-post="#ignored"></div><form hx-post="/aiaas/create_key"><input type="hidden" name="csrfmiddlewaretoken" value="tok1"><meta name="csrfmiddlewaretoken" content="tok2"><select name="unit"><option value="">---------</option><option value="lab1">Lab One</option></select><select name="pool"><option value="BASIC">Basic</option><option value="PREMIUM">Premium</option></select></form></html>'
+assert_eq "first hx-post target" "$FORM_URL" "/aiaas/create_key"
+assert_eq "unit options only" "$(printf '%s' "$UNITS_TSV" | cut -f1 | paste -sd,)" "lab1"
+assert_eq "hidden csrf wins, meta is a fallback" "$MODAL_CSRF" "tok1"
+parse_modal_form '<html><form action="/aiaas/create_key"><meta name="csrfmiddlewaretoken" content="tok2"></form></html>'
+assert_eq "action fallback" "$FORM_URL" "/aiaas/create_key"
+assert_eq "meta csrf fallback" "$MODAL_CSRF" "tok2"
+parse_modal_form '<html><form hx-post="#self" action="/aiaas/create_key"><input type="hidden" name="csrfmiddlewaretoken" value="tok3"></form></html>'
+assert_eq "hash target skipped, action wins" "$FORM_URL" "/aiaas/create_key"
+assert_eq "input csrf wins over meta" "$MODAL_CSRF" "tok3"
+parse_modal_form '<html><div hx-post="/accounts/logout"></div><form id="k"><input type="hidden" name="csrfmiddlewaretoken" value="tok4"></form><button hx-post="/aiaas/modal_key_new"></button></html>'
+assert_eq "button and div targets ignored" "$FORM_URL" ""
+
+# 12c. fresh_csrf_from_headers keeps the first Set-Cookie token
+openwork_selftest_reset
+printf 'Set-Cookie: csrftoken=first; Path=/\nSet-Cookie: csrftoken=second; Path=/\n' > "$ST_WORK/hdrs"
+fresh_csrf_from_headers "$ST_WORK/hdrs"
+assert_eq "csrf takes the first set-cookie" "$SESSION_CSRF" "first"
 
 # 13. runtime rows: fresh write, values, then idempotence
 openwork_selftest_reset
@@ -265,6 +289,30 @@ write_runtime_rows
 MERGED=$(read_config_row "$DB" runtime_opencode_configs "$ENGINE_GLOBAL_ID" config_json)
 assert_eq "merged row canonicalized with definition and extra key" "$MERGED" '{"disabled_providers":["openwork-free"],"extra":1,"provider":{"epfl-aiaas":'"$DEFINITION_JSON"',"other":{}}}'
 assert_match "other provider kept" "$MERGED" '"other":\{\}'
+
+# 14b. an engine global row without a provider key gains the definition
+openwork_selftest_reset
+write_runtime_rows
+sqlite3 "$DB" "UPDATE runtime_opencode_configs SET config_json = '{\"extra\":1}' WHERE workspace_id = '$ENGINE_GLOBAL_ID';"
+write_runtime_rows
+MERGED=$(read_config_row "$DB" runtime_opencode_configs "$ENGINE_GLOBAL_ID" config_json)
+assert_eq "missing provider map rebuilt with the definition" "$MERGED" '{"disabled_providers":["openwork-free"],"extra":1,"provider":{"epfl-aiaas":'"$DEFINITION_JSON"'}}'
+
+# 14c. a non-object provider map or non-object row is a hard error
+openwork_selftest_reset
+write_runtime_rows
+sqlite3 "$DB" "UPDATE runtime_opencode_configs SET config_json = '{\"provider\":\"nope\"}' WHERE workspace_id = '$ENGINE_GLOBAL_ID';"
+assert_fail "non-object provider map aborts" write_runtime_rows
+sqlite3 "$DB" "UPDATE runtime_opencode_configs SET config_json = '[1]' WHERE workspace_id = '$ENGINE_GLOBAL_ID';"
+assert_fail "non-object engine row aborts" write_runtime_rows
+
+# 14d. a corrupt or non-object ownership row is a hard error
+openwork_selftest_reset
+write_runtime_rows
+sqlite3 "$DB" "UPDATE openwork_workspace_configs SET config_json = 'not json' WHERE workspace_id = '$MACHINE_OWNERSHIP_ID';"
+assert_fail "corrupt ownership row aborts" write_runtime_rows
+sqlite3 "$DB" "UPDATE openwork_workspace_configs SET config_json = '[2]' WHERE workspace_id = '$MACHINE_OWNERSHIP_ID';"
+assert_fail "non-object ownership row aborts" write_runtime_rows
 
 # 15. engine global row corruption is a hard error
 openwork_selftest_reset
@@ -291,6 +339,26 @@ write_env_store 'sk-tok'
 assert_eq "env store idempotent" "$(stat -c %Y "$ENVFILE")" "$MT2"
 write_env_store 'sk-tok-2'
 assert_match "env store rotated" "$(grep -c '"value": "sk-tok-2"' "$ENVFILE")" '1'
+
+# 17b. a foreign top-level key and a non-1 schemaVersion survive a write
+openwork_selftest_reset
+printf '{"schemaVersion":7,"updatedAt":1,"variables":[],"channel":"beta"}' > "$CONFDIR/env.json"
+write_env_store 'sk-tok'
+assert_match "schema version preserved" "$(grep -c '"schemaVersion": 7' "$CONFDIR/env.json")" '1'
+assert_match "foreign key preserved" "$(grep -c '"channel": "beta"' "$CONFDIR/env.json")" '1'
+
+# 17c. a non-object env store is a hard error
+openwork_selftest_reset
+printf '"just a string"' > "$CONFDIR/env.json"
+assert_fail "non-object env store aborts" write_env_store sk-tok
+printf '[]' > "$CONFDIR/env.json"
+assert_fail "array env store aborts" write_env_store sk-tok
+
+# 17d. a non-object opencode.json is a hard error
+openwork_selftest_reset
+mkdir -p "$ST_HOME/.config/opencode"
+printf '[1]' > "$ST_HOME/.config/opencode/opencode.json"
+assert_fail "non-object opencode config aborts" write_opencode_config sk-tok
 
 # 18. env store with a foreign variable keeps it sorted before ours
 openwork_selftest_reset
@@ -331,6 +399,28 @@ assert_eq "foreign db renamed" "$FOREIGN_BAK" "1"
 sqlite3 "$STATEDIR/session.db" "CREATE TABLE session (x);"
 repair_opencode_state
 assert_eq "opencode session db kept" "$(find "$STATEDIR" -maxdepth 1 -name 'session.db' | wc -l)" "1"
+: > "$STATEDIR/empty.db"
+repair_opencode_state
+assert_eq "empty db kept like the GUI" "$(find "$STATEDIR" -maxdepth 1 -name 'empty.db' | wc -l)" "1"
+
+# 21b. the macOS legacy state dir is scanned on every OS
+openwork_selftest_reset
+LEGACY="$ST_HOME/Library/Application Support/opencode"
+mkdir -p "$LEGACY"
+sqlite3 "$LEGACY/legacy.db" "CREATE TABLE other (x);"
+repair_opencode_state
+assert_eq "legacy mac dir scanned on linux" "$(find "$LEGACY" -maxdepth 1 -name 'legacy.db.bak-*' | wc -l)" "1"
+
+# 21c. run_with_timeout without timeout(1), stock macOS, passes output through
+ST_BIN="$ST_WORK/bin"
+mkdir -p "$ST_BIN"
+for t in bash mktemp cat rm sleep; do
+    p=$(command -v "$t" 2> /dev/null) && ln -sf "$p" "$ST_BIN/$t"
+done
+OUT=$(PATH="$ST_BIN" bash -c "$(declare -f run_with_timeout)
+run_with_timeout 5 bash -c 'echo fallback-output'
+")
+assert_eq "fallback passes output through" "$OUT" "fallback-output"
 
 # 22. workspace heal: removes the stale provider, deletes a schema-only file
 openwork_selftest_reset
@@ -346,6 +436,16 @@ assert_eq "schema-only file deleted" "$([[ -f $WSDIR/opencode.jsonc ]] && echo p
 printf '// note\n{"provider":{"epfl-aiaas":{}}}' > "$WSDIR/opencode.jsonc"
 heal_workspace_config "$WSDIR"
 assert_match "commented file untouched" "$(grep -c '// note' "$WSDIR/opencode.jsonc")" '1'
+printf '{"provider":{"epfl-aiaas":{}}}' > "$WSDIR/opencode.jsonc"
+heal_workspace_config "$WSDIR"
+assert_eq "provider-only file deleted" "$([[ -f $WSDIR/opencode.jsonc ]] && echo present || echo gone)" "gone"
+
+# 22b. a selected id missing from workspaces[] keeps its id, no fallback re-pick
+openwork_selftest_reset
+WS2="$ST_HOME/ws2"
+mkdir -p "$WS2" "$ST_HOME/.config/com.differentai.openwork"
+printf '{"selectedId":"ws_selected","workspaces":[{"id":"ws_other","path":"%s","workspaceType":"local"}]}' "$WS2" > "$ST_HOME/.config/com.differentai.openwork/openwork-workspaces.json"
+assert_eq "selected id kept when workspaces lost it" "$(resolve_workspace)" "ws_selected"
 
 # 23. telemetry disable
 openwork_selftest_reset

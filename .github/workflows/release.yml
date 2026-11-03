@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends build-essential ca-certificates curl file git \
+          apt-get install -y --no-install-recommends build-essential ca-certificates curl file gh git \
             libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev patchelf pkg-config wget zstd
           git config --system --add safe.directory "$GITHUB_WORKSPACE"
 
