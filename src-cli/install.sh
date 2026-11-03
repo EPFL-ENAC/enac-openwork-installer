@@ -141,54 +141,57 @@ sqlq() {
     printf '%s' "$1" | sed -e "s/'/''/g"
 }
 
+# SQL reaches sqlite3 on stdin, never as an argv word: Linux caps one exec
+# argument at 128 KiB (MAX_ARG_STRLEN) and a whole JSON body overruns it with
+# "Argument list too long".
 jvalid() {
-    [[ $(sqlite3 :memory: "SELECT json_valid('$(sqlq "$1")');") == "1" ]]
+    [[ $(sqlite3 :memory: <<< "SELECT json_valid('$(sqlq "$1")');") == "1" ]]
 }
 
 jtype_at() {
-    sqlite3 :memory: "SELECT json_type('$(sqlq "$1")', '$(sqlq "$2")');"
+    sqlite3 :memory: <<< "SELECT json_type('$(sqlq "$1")', '$(sqlq "$2")');"
 }
 
 jraw_at() {
-    sqlite3 :memory: "SELECT json('$(sqlq "$1")') -> '$(sqlq "$2")';"
+    sqlite3 :memory: <<< "SELECT json('$(sqlq "$1")') -> '$(sqlq "$2")';"
 }
 
 # Value at path as a JSON literal: raw text for objects and arrays, quoted
 # literal for scalars, so it can be re-embedded in a larger JSON document.
 jlit_at() {
-    sqlite3 :memory: "SELECT json('$(sqlq "$1")') -> '$(sqlq "$2")';"
+    sqlite3 :memory: <<< "SELECT json('$(sqlq "$1")') -> '$(sqlq "$2")';"
 }
 
 # Canonical compact JSON: object keys recursively sorted by byte order, same
 # shape as serde_json::to_string over serde_json BTreeMap values.
 json_canonical() {
     local t
-    t=$(sqlite3 :memory: "SELECT json_type('$(sqlq "$1")');")
+    t=$(sqlite3 :memory: <<< "SELECT json_type('$(sqlq "$1")');")
     case $t in
         object) __canon_object "$1" ;;
         array) __canon_array "$1" ;;
-        *) sqlite3 :memory: "SELECT json('$(sqlq "$1")');" ;;
+        *) sqlite3 :memory: <<< "SELECT json('$(sqlq "$1")');" ;;
     esac
 }
 
 __canon_object() {
     local json=$1 keys k v out="{" first=1
-    keys=$(sqlite3 :memory: "SELECT key FROM json_each('$(sqlq "$json")') ORDER BY key;") || true
+    keys=$(sqlite3 :memory: <<< "SELECT key FROM json_each('$(sqlq "$json")') ORDER BY key;") || true
     while IFS= read -r k; do
         [[ -n $k ]] || continue
         v=$(json_canonical "$(jraw_at "$json" "\$.$k")")
         if [[ $first -eq 0 ]]; then out+=","; fi
         first=0
-        out+="$(sqlite3 :memory: "SELECT json_quote('$(sqlq "$k")');"):$v"
+        out+="$(sqlite3 :memory: <<< "SELECT json_quote('$(sqlq "$k")');"):$v"
     done <<< "$keys"
     printf '%s}' "$out"
 }
 
 __canon_array() {
     local json=$1 n=0 i e out="[" first=1
-    n=$(sqlite3 :memory: "SELECT json_array_length('$(sqlq "$json")');") || n=0
+    n=$(sqlite3 :memory: <<< "SELECT json_array_length('$(sqlq "$json")');") || n=0
     for ((i = 0; i < n; i++)); do
-        e=$(sqlite3 :memory: "SELECT json('$(sqlq "$json")') -> '\$[$i]';")
+        e=$(sqlite3 :memory: <<< "SELECT json('$(sqlq "$json")') -> '\$[$i]';")
         if [[ $first -eq 0 ]]; then out+=","; fi
         first=0
         out+="$(json_canonical "$e")"
@@ -304,10 +307,10 @@ oc_provider_block() {
 merge_oc_config() {
     local base=$1 token=$2 block prov_val schema_val k v keys has_prov=0 out
     block=$(oc_provider_block "$token")
-    prov_val=$(sqlite3 :memory: "SELECT json_set(COALESCE(json_extract('$(sqlq "$base")','$.providers'), json('{}')), '\$.\"$PROVIDER_ID\"', json('$(sqlq "$block")'));")
-    schema_val=$(sqlite3 :memory: "SELECT json_quote(COALESCE(json_extract('$(sqlq "$base")','\$.\"\$schema\"'), '$OC_CONFIG_SCHEMA'));")
+    prov_val=$(sqlite3 :memory: <<< "SELECT json_set(COALESCE(json_extract('$(sqlq "$base")','$.providers'), json('{}')), '\$.\"$PROVIDER_ID\"', json('$(sqlq "$block")'));")
+    schema_val=$(sqlite3 :memory: <<< "SELECT json_quote(COALESCE(json_extract('$(sqlq "$base")','\$.\"\$schema\"'), '$OC_CONFIG_SCHEMA'));")
     out='{"$schema":'"$schema_val"
-    keys=$(sqlite3 :memory: "SELECT key FROM json_each('$(sqlq "$base")');") || true
+    keys=$(sqlite3 :memory: <<< "SELECT key FROM json_each('$(sqlq "$base")');") || true
     while IFS= read -r k; do
         [[ -n $k ]] || continue
         if [[ $k == '$schema' ]]; then continue; fi
@@ -317,7 +320,7 @@ merge_oc_config() {
             continue
         fi
         v=$(jlit_at "$base" "\$.$k")
-        out+=",$(sqlite3 :memory: "SELECT json_quote('$(sqlq "$k")');"):$v"
+        out+=",$(sqlite3 :memory: <<< "SELECT json_quote('$(sqlq "$k")');"):$v"
     done <<< "$keys"
     [[ $has_prov -eq 1 ]] || out+=',"providers":'"$prov_val"
     out+='}'
@@ -340,10 +343,10 @@ write_opencode_config() {
         if ! jvalid "$stripped"; then
             die "$file is not valid JSON or JSONC, fix it and rerun the installer"
         fi
-        if [[ $(sqlite3 :memory: "SELECT json_type('$(sqlq "$stripped")');") != "object" ]]; then
+        if [[ $(sqlite3 :memory: <<< "SELECT json_type('$(sqlq "$stripped")');") != "object" ]]; then
             die "$file is not a JSON object, fix it and rerun the installer"
         fi
-        base=$(sqlite3 :memory: "SELECT json('$(sqlq "$stripped")');")
+        base=$(sqlite3 :memory: <<< "SELECT json('$(sqlq "$stripped")');")
     fi
     merged=$(merge_oc_config "$base" "$token")
     existing_norm=$base
@@ -367,45 +370,45 @@ write_env_store() {
         if ! jvalid "$raw"; then
             die "$file is not valid JSON, fix or remove it and rerun the installer"
         fi
-        if [[ $(sqlite3 :memory: "SELECT json_type('$(sqlq "$raw")');") != "object" ]]; then
+        if [[ $(sqlite3 :memory: <<< "SELECT json_type('$(sqlq "$raw")');") != "object" ]]; then
             die "$file is not a JSON object, fix or remove it and rerun the installer"
         fi
-        vt=$(sqlite3 :memory: "SELECT json_type('$(sqlq "$raw")','\$.variables');")
+        vt=$(sqlite3 :memory: <<< "SELECT json_type('$(sqlq "$raw")','\$.variables');")
         if [[ -n $vt && $vt != "array" ]]; then
             die "$file holds no variable list, fix or remove it and rerun the installer"
         fi
         if [[ $vt == "array" ]] \
-            && [[ $(sqlite3 :memory: "SELECT count(*) FROM json_each('$(sqlq "$raw")','\$.variables') WHERE json_type(value) IS NULL OR json_type(value) != 'object';") != "0" ]]; then
+            && [[ $(sqlite3 :memory: <<< "SELECT count(*) FROM json_each('$(sqlq "$raw")','\$.variables') WHERE json_type(value) IS NULL OR json_type(value) != 'object';") != "0" ]]; then
             die "$file holds a variable that is not an object, fix or remove it and rerun the installer"
         fi
         base=$raw
-        cur=$(sqlite3 :memory: "SELECT json_extract(value,'\$.value') FROM json_each('$(sqlq "$base")','\$.variables') WHERE json_extract(value,'\$.key')='$OPENWORK_ENV_KEY';")
+        cur=$(sqlite3 :memory: <<< "SELECT json_extract(value,'\$.value') FROM json_each('$(sqlq "$base")','\$.variables') WHERE json_extract(value,'\$.key')='$OPENWORK_ENV_KEY';")
         if [[ $cur == "$token" ]]; then
             sub "OpenWork env store already up to date ($file)"
             return 0
         fi
     fi
-    entry="{\"key\":\"$OPENWORK_ENV_KEY\",\"updatedAt\":$now,\"value\":$(sqlite3 :memory: "SELECT json_quote('$token');")}"
+    entry="{\"key\":\"$OPENWORK_ENV_KEY\",\"updatedAt\":$now,\"value\":$(sqlite3 :memory: <<< "SELECT json_quote('$token');")}"
     vars=""
     placed=0
     while IFS=$'\t' read -r k v; do
         # A missing or null key decodes to an empty k: the entry survives
         # verbatim, like merge_env_store skipping it.
         [[ -n $k ]] || continue
-        k=$(sqlite3 :memory: "SELECT json_extract('$(sqlq "$k")','\$');")
+        k=$(sqlite3 :memory: <<< "SELECT json_extract('$(sqlq "$k")','\$');")
         if [[ $placed -eq 0 && $k == "$OPENWORK_ENV_KEY" ]]; then continue; fi
         if [[ $placed -eq 0 && $k > "$OPENWORK_ENV_KEY" ]]; then
             vars+=",$entry"
             placed=1
         fi
         vars+=",$v"
-    done < <(sqlite3 -separator $'\t' :memory: "SELECT CASE WHEN json_type(value,'\$.key') == 'text' THEN json_quote(json_extract(value,'\$.key')) ELSE 'null' END, json(value) FROM json_each('$(sqlq "$base")','\$.variables') ORDER BY json_extract(value,'\$.key');") || true
+    done < <(sqlite3 -separator $'\t' :memory: <<< "SELECT CASE WHEN json_type(value,'\$.key') == 'text' THEN json_quote(json_extract(value,'\$.key')) ELSE 'null' END, json(value) FROM json_each('$(sqlq "$base")','\$.variables') ORDER BY json_extract(value,'\$.key');") || true
     if [[ $placed -eq 0 ]]; then vars+=",$entry"; fi
     # json_set over the existing store, so foreign top-level keys and a non-1
     # schemaVersion survive, like merge_env_store mutating the object in place.
-    sv=$(sqlite3 :memory: "SELECT CASE WHEN json_type('$(sqlq "$base")','\$.schemaVersion') IN ('integer','real') THEN json_extract('$(sqlq "$base")','\$.schemaVersion') ELSE 1 END;")
+    sv=$(sqlite3 :memory: <<< "SELECT CASE WHEN json_type('$(sqlq "$base")','\$.schemaVersion') IN ('integer','real') THEN json_extract('$(sqlq "$base")','\$.schemaVersion') ELSE 1 END;")
     vars=${vars#,}
-    out=$(sqlite3 :memory: "SELECT json_set('$(sqlq "$base")','\$.schemaVersion',$sv,'\$.updatedAt',$now,'\$.variables', json('[$vars]'));")
+    out=$(sqlite3 :memory: <<< "SELECT json_set('$(sqlq "$base")','\$.schemaVersion',$sv,'\$.updatedAt',$now,'\$.variables', json('[$vars]'));")
     tmp="$file.tmp"
     printf '%s\n' "$(json_pretty "$(json_canonical "$out")")" > "$tmp"
     chmod 600 "$tmp"
@@ -415,12 +418,12 @@ write_env_store() {
 
 upsert_row() {
     local db=$1 table=$2 col=$3 ws_id=$4 value=$5 now=$6
-    sqlite3 -cmd '.timeout 5000' "$db" "INSERT INTO $table (workspace_id, $col, updated_at) VALUES ('$ws_id', '$(sqlq "$value")', $now) ON CONFLICT(workspace_id) DO UPDATE SET $col = excluded.$col, updated_at = excluded.updated_at;"
+    sqlite3 -cmd '.timeout 5000' "$db" <<< "INSERT INTO $table (workspace_id, $col, updated_at) VALUES ('$ws_id', '$(sqlq "$value")', $now) ON CONFLICT(workspace_id) DO UPDATE SET $col = excluded.$col, updated_at = excluded.updated_at;"
 }
 
 read_config_row() {
     local db=$1 table=$2 ws_id=$3
-    sqlite3 -cmd '.timeout 5000' "$db" "SELECT $4 FROM $table WHERE workspace_id = '$ws_id';" 2> /dev/null || true
+    sqlite3 -cmd '.timeout 5000' "$db" <<< "SELECT $4 FROM $table WHERE workspace_id = '$ws_id';" 2> /dev/null || true
 }
 
 write_runtime_rows() {
@@ -441,23 +444,23 @@ SQL
         if ! jvalid "$existing"; then
             die "runtime.sqlite holds a corrupt row for $ENGINE_GLOBAL_ID, remove it and rerun"
         fi
-        if [[ $(sqlite3 :memory: "SELECT json_type('$(sqlq "$existing")');") != "object" ]]; then
+        if [[ $(sqlite3 :memory: <<< "SELECT json_type('$(sqlq "$existing")');") != "object" ]]; then
             die "the OpenWork runtime config row for $ENGINE_GLOBAL_ID is not a JSON object, remove it and rerun"
         fi
         ptype=$(jtype_at "$existing" "\$.provider")
         if [[ $ptype == "object" ]]; then
-            pm=$(sqlite3 :memory: "SELECT json_set(json_extract('$(sqlq "$existing")','\$.provider'), '\$.\"$OPENWORK_PROVIDER_ID\"', json('$(sqlq "$DEFINITION_JSON")'));")
+            pm=$(sqlite3 :memory: <<< "SELECT json_set(json_extract('$(sqlq "$existing")','\$.provider'), '\$.\"$OPENWORK_PROVIDER_ID\"', json('$(sqlq "$DEFINITION_JSON")'));")
         elif [[ -n $ptype ]]; then
             die "the OpenWork runtime config holds no provider map ($ENGINE_GLOBAL_ID has a non-object provider), remove the row and rerun"
         else
             pm="{\"$OPENWORK_PROVIDER_ID\":$DEFINITION_JSON}"
         fi
-        new=$(sqlite3 :memory: "SELECT json_set('$(sqlq "$existing")','\$.provider', json('$(sqlq "$pm")'));")
+        new=$(sqlite3 :memory: <<< "SELECT json_set('$(sqlq "$existing")','\$.provider', json('$(sqlq "$pm")'));")
         if [[ $(jtype_at "$new" "\$.disabled_providers") != "array" ]]; then
-            new=$(sqlite3 :memory: "SELECT json_set('$(sqlq "$new")','\$.disabled_providers', json('[\"$OPENWORK_FREE_PROVIDER_ID\"]'));")
-        elif ! sqlite3 :memory: "SELECT 1 FROM json_each('$(sqlq "$new")','\$.disabled_providers') WHERE value='$OPENWORK_FREE_PROVIDER_ID';" | grep -q 1; then
-            dt=$(sqlite3 :memory: "SELECT json_group_array(value) FROM (SELECT value FROM json_each('$(sqlq "$new")','\$.disabled_providers') UNION ALL SELECT '$OPENWORK_FREE_PROVIDER_ID');")
-            new=$(sqlite3 :memory: "SELECT json_set('$(sqlq "$new")','\$.disabled_providers', json('$(sqlq "$dt")'));")
+            new=$(sqlite3 :memory: <<< "SELECT json_set('$(sqlq "$new")','\$.disabled_providers', json('[\"$OPENWORK_FREE_PROVIDER_ID\"]'));")
+        elif ! sqlite3 :memory: <<< "SELECT 1 FROM json_each('$(sqlq "$new")','\$.disabled_providers') WHERE value='$OPENWORK_FREE_PROVIDER_ID';" | grep -q 1; then
+            dt=$(sqlite3 :memory: <<< "SELECT json_group_array(value) FROM (SELECT value FROM json_each('$(sqlq "$new")','\$.disabled_providers') UNION ALL SELECT '$OPENWORK_FREE_PROVIDER_ID');")
+            new=$(sqlite3 :memory: <<< "SELECT json_set('$(sqlq "$new")','\$.disabled_providers', json('$(sqlq "$dt")'));")
         fi
         new=$(json_canonical "$new")
     fi
@@ -476,14 +479,14 @@ SQL
         if ! jvalid "$existing_own"; then
             die "the machine ownership row $MACHINE_OWNERSHIP_ID is not valid JSON, remove it and rerun"
         fi
-        if [[ $(sqlite3 :memory: "SELECT json_type('$(sqlq "$existing_own")');") != "object" ]]; then
+        if [[ $(sqlite3 :memory: <<< "SELECT json_type('$(sqlq "$existing_own")');") != "object" ]]; then
             die "the machine ownership row $MACHINE_OWNERSHIP_ID is not a JSON object, remove it and rerun"
         fi
         base_own=$existing_own
-        cur=$(sqlite3 :memory: "SELECT json_extract('$(sqlq "$base_own")','\$.\"$OPENWORK_PROVIDER_ID\"');")
+        cur=$(sqlite3 :memory: <<< "SELECT json_extract('$(sqlq "$base_own")','\$.\"$OPENWORK_PROVIDER_ID\"');")
     fi
     if [[ $cur != "$MACHINE_OWNERSHIP_FP" ]]; then
-        new_own=$(sqlite3 :memory: "SELECT json_set('$(sqlq "$base_own")','\$.\"$OPENWORK_PROVIDER_ID\"','$MACHINE_OWNERSHIP_FP');")
+        new_own=$(sqlite3 :memory: <<< "SELECT json_set('$(sqlq "$base_own")','\$.\"$OPENWORK_PROVIDER_ID\"','$MACHINE_OWNERSHIP_FP');")
         new_own=$(json_canonical "$new_own")
         upsert_row "$db" openwork_workspace_configs config_json "$MACHINE_OWNERSHIP_ID" "$new_own" "$now"
         sub "wrote the machine provider template ownership row"
@@ -504,7 +507,7 @@ heal_workspace_config() {
         sub "left $file untouched (comments or invalid JSON)"
         return 0
     fi
-    if [[ $(sqlite3 :memory: "SELECT json_type('$(sqlq "$content")');") != "object" ]]; then
+    if [[ $(sqlite3 :memory: <<< "SELECT json_type('$(sqlq "$content")');") != "object" ]]; then
         sub "left $file untouched (not a JSON object)"
         return 0
     fi
@@ -512,11 +515,11 @@ heal_workspace_config() {
         || [[ $(jtype_at "$content" "\$.provider.\"$OPENWORK_PROVIDER_ID\"") == "null" ]]; then
         return 0
     fi
-    next=$(sqlite3 :memory: "SELECT json_remove('$(sqlq "$content")', '\$.provider.\"$OPENWORK_PROVIDER_ID\"');")
-    if [[ $(sqlite3 :memory: "SELECT count(*) FROM json_each('$(sqlq "$next")','\$.provider');" 2> /dev/null || echo 1) == "0" ]]; then
-        next=$(sqlite3 :memory: "SELECT json_remove('$(sqlq "$next")', '\$.provider');")
+    next=$(sqlite3 :memory: <<< "SELECT json_remove('$(sqlq "$content")', '\$.provider.\"$OPENWORK_PROVIDER_ID\"');")
+    if [[ $(sqlite3 :memory: <<< "SELECT count(*) FROM json_each('$(sqlq "$next")','\$.provider');" 2> /dev/null || echo 1) == "0" ]]; then
+        next=$(sqlite3 :memory: <<< "SELECT json_remove('$(sqlq "$next")', '\$.provider');")
     fi
-    keys=$(sqlite3 :memory: "SELECT count(*) FROM json_each('$(sqlq "$next")') WHERE key != '\$schema';")
+    keys=$(sqlite3 :memory: <<< "SELECT count(*) FROM json_each('$(sqlq "$next")') WHERE key != '\$schema';")
     if [[ $keys == "0" ]]; then
         rm -f "$file"
         sub "removed $file (only a schema key remained)"
@@ -549,7 +552,7 @@ resolve_workspace() {
     fi
     local key
     for key in selectedId selectedWorkspaceId activeId activeWorkspaceId watchedId watchedWorkspaceId; do
-        v=$(sqlite3 :memory: "SELECT json_extract('$(sqlq "$state")','\$.\"$key\"');" 2> /dev/null || true)
+        v=$(sqlite3 :memory: <<< "SELECT json_extract('$(sqlq "$state")','\$.\"$key\"');" 2> /dev/null || true)
         if [[ -n $v && $v != "null" ]]; then
             ws_id=$v
             break
@@ -557,13 +560,13 @@ resolve_workspace() {
     done
     entry=""
     if [[ -n $ws_id ]]; then
-        entry=$(sqlite3 :memory: "SELECT json_extract(value,'\$.path')||char(9)||COALESCE(json_extract(value,'\$.workspaceType'),'local') FROM json_each('$(sqlq "$state")','\$.workspaces') WHERE json_extract(value,'\$.id')='$ws_id' LIMIT 1;") || true
+        entry=$(sqlite3 :memory: <<< "SELECT json_extract(value,'\$.path')||char(9)||COALESCE(json_extract(value,'\$.workspaceType'),'local') FROM json_each('$(sqlq "$state")','\$.workspaces') WHERE json_extract(value,'\$.id')='$ws_id' LIMIT 1;") || true
     fi
     if [[ -z $ws_id ]]; then
         # No usable selection key: fall back to the first local workspace, like
         # pick_workspace_id. A selected id missing from workspaces[] keeps its
         # id (path None in resolve_default_workspace), it only skips the heal.
-        entry=$(sqlite3 :memory: "SELECT json_extract(value,'\$.id')||char(9)||json_extract(value,'\$.path')||char(9)||COALESCE(json_extract(value,'\$.workspaceType'),'local') FROM json_each('$(sqlq "$state")','\$.workspaces') WHERE COALESCE(json_extract(value,'\$.workspaceType'),'local')='local' LIMIT 1;") || true
+        entry=$(sqlite3 :memory: <<< "SELECT json_extract(value,'\$.id')||char(9)||json_extract(value,'\$.path')||char(9)||COALESCE(json_extract(value,'\$.workspaceType'),'local') FROM json_each('$(sqlq "$state")','\$.workspaces') WHERE COALESCE(json_extract(value,'\$.workspaceType'),'local')='local' LIMIT 1;") || true
         if [[ -n $entry ]]; then
             ws_id=$(printf '%s' "$entry" | cut -f1)
             entry=$(printf '%s' "$entry" | cut -f2-)
@@ -622,9 +625,9 @@ check_prereqs() {
     else
         command -v xdg-open > /dev/null 2>&1 || die "xdg-open is required to launch the EPFL portal in a browser (on Ubuntu: sudo apt install xdg-utils)"
     fi
-    [[ $(sqlite3 :memory: "SELECT json_valid('{}');") == "1" ]] \
+    [[ $(sqlite3 :memory: <<< "SELECT json_valid('{}');") == "1" ]] \
         || die "the sqlite3 binary lacks JSON support (json1), install a full sqlite3 build"
-    [[ $(sqlite3 :memory: "SELECT json('{}') -> '\$';") == "{}" ]] \
+    [[ $(sqlite3 :memory: <<< "SELECT json('{}') -> '\$';") == "{}" ]] \
         || die "the sqlite3 binary lacks the JSON arrow operator (3.38+), install a newer sqlite3"
     # The GUI stays silent when ldconfig is unavailable; webkit sonames are GUI-only.
     if [[ $OS == "linux" ]] && command -v ldconfig > /dev/null 2>&1 && ! ldconfig -p 2> /dev/null | grep -q "libfuse.so.2"; then
@@ -734,7 +737,7 @@ repair_opencode_state() {
         for f in "$d"/*.db; do
             [[ -f $f ]] || continue
             # Foreign like is_foreign: at least one table, none named session.
-            probe=$(sqlite3 "$f" "SELECT CASE WHEN (SELECT count(*) FROM sqlite_master WHERE type='table') > 0 AND NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='session') THEN 1 ELSE 0 END;" 2> /dev/null || true)
+            probe=$(sqlite3 "$f" <<< "SELECT CASE WHEN (SELECT count(*) FROM sqlite_master WHERE type='table') > 0 AND NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='session') THEN 1 ELSE 0 END;" 2> /dev/null || true)
             if [[ $probe == "1" ]]; then
                 mv "$f" "$f.bak-$stamp"
                 for s in -wal -shm; do
@@ -781,7 +784,7 @@ verify_sha512() {
 download_release_asset() {
     local release=$1 prefix=$2 suffix=$3 dest=$4
     local version asset url meta_name
-    version=$(sqlite3 :memory: "SELECT json_extract('$(sqlq "$release")','\$.tag_name');")
+    version=$(sqlite3 :memory: <<< "SELECT json_extract('$(sqlq "$release")','\$.tag_name');")
     version=${version#v}
     asset="${prefix}${version}${suffix}"
     case $asset in
@@ -789,9 +792,9 @@ download_release_asset() {
         *arm64.AppImage) meta_name="latest-linux-arm64.yml" ;;
         *) meta_name="latest-linux.yml" ;;
     esac
-    url=$(sqlite3 :memory: "SELECT json_extract(value,'\$.browser_download_url') FROM json_each('$(sqlq "$release")','\$.assets') WHERE json_extract(value,'\$.name')='$asset' LIMIT 1;")
+    url=$(sqlite3 :memory: <<< "SELECT json_extract(value,'\$.browser_download_url') FROM json_each('$(sqlq "$release")','\$.assets') WHERE json_extract(value,'\$.name')='$asset' LIMIT 1;")
     [[ -n $url && $url != "null" ]] || die "the OpenWork release holds no asset named $asset"
-    meta_url=$(sqlite3 :memory: "SELECT json_extract(value,'\$.browser_download_url') FROM json_each('$(sqlq "$release")','\$.assets') WHERE json_extract(value,'\$.name')='$meta_name' LIMIT 1;")
+    meta_url=$(sqlite3 :memory: <<< "SELECT json_extract(value,'\$.browser_download_url') FROM json_each('$(sqlq "$release")','\$.assets') WHERE json_extract(value,'\$.name')='$meta_name' LIMIT 1;")
     say "downloading $asset" >&2
     curl -fL --max-time "$INSTALL_TIMEOUT" -H "User-Agent: $PORTAL_UA" -o "$dest" "$url" \
         || die "could not download $url"
@@ -1053,12 +1056,12 @@ fetch_keys_json() {
         "$PORTAL_BASE"/*) : ;;
         *) die "the portal redirected away from the keys page, sign in again and rerun the installer" ;;
     esac
-    sqlite3 :memory: "SELECT json(readfile('$CONFDIR/.keys.json'));" 2> /dev/null \
-        || sqlite3 :memory: "SELECT json('$(sqlq "$(cat "$CONFDIR/.keys.json")")');"
+    sqlite3 :memory: <<< "SELECT json(readfile('$CONFDIR/.keys.json'));" 2> /dev/null \
+        || sqlite3 :memory: <<< "SELECT json('$(sqlq "$(cat "$CONFDIR/.keys.json")")');"
 }
 
 keys_selectable_tsv() {
-    sqlite3 :memory: "SELECT json_extract(value,'\$.id') || char(9) || COALESCE(json_extract(value,'\$.name'),'') || char(9) || COALESCE(json_extract(value,'\$.pool'),'') FROM json_each('$(sqlq "$1")') WHERE COALESCE(json_extract(value,'\$.is_application'),0) = 0 AND COALESCE(json_extract(value,'\$.is_legacy'),0) = 0 AND COALESCE(json_extract(value,'\$.is_enabled'),0) = 1 AND COALESCE(json_extract(value,'\$.is_pending'),0) = 0 ORDER BY json_extract(value,'\$.name');"
+    sqlite3 :memory: <<< "SELECT json_extract(value,'\$.id') || char(9) || COALESCE(json_extract(value,'\$.name'),'') || char(9) || COALESCE(json_extract(value,'\$.pool'),'') FROM json_each('$(sqlq "$1")') WHERE COALESCE(json_extract(value,'\$.is_application'),0) = 0 AND COALESCE(json_extract(value,'\$.is_legacy'),0) = 0 AND COALESCE(json_extract(value,'\$.is_enabled'),0) = 1 AND COALESCE(json_extract(value,'\$.is_pending'),0) = 0 ORDER BY json_extract(value,'\$.name');"
 }
 
 reveal_secret() {
@@ -1076,7 +1079,7 @@ suggest_key_name() {
     local keys_json=$1 i candidate
     for ((i = 2; i < 100; i++)); do
         candidate="$DEFAULT_KEY_NAME-$i"
-        if ! sqlite3 :memory: "SELECT 1 FROM json_each('$(sqlq "$keys_json")') WHERE json_extract(value,'\$.name')='$candidate';" | grep -q 1; then
+        if ! sqlite3 :memory: <<< "SELECT 1 FROM json_each('$(sqlq "$keys_json")') WHERE json_extract(value,'\$.name')='$candidate';" | grep -q 1; then
             printf '%s\n' "$candidate"
             return 0
         fi
@@ -1161,9 +1164,9 @@ create_key_flow() {
             name=$(ask_default_value "key name" "$name")
             continue
         fi
-        if sqlite3 :memory: "SELECT 1 FROM json_each('$(sqlq "$keys_json")') WHERE json_extract(value,'\$.name')='$name';" | grep -q 1; then
+        if sqlite3 :memory: <<< "SELECT 1 FROM json_each('$(sqlq "$keys_json")') WHERE json_extract(value,'\$.name')='$name';" | grep -q 1; then
             local existing_id
-            existing_id=$(sqlite3 :memory: "SELECT json_extract(value,'\$.id') FROM json_each('$(sqlq "$keys_json")') WHERE json_extract(value,'\$.name')='$name' AND COALESCE(json_extract(value,'\$.is_application'),0) = 0 AND COALESCE(json_extract(value,'\$.is_legacy'),0) = 0 AND COALESCE(json_extract(value,'\$.is_enabled'),0) = 1 AND COALESCE(json_extract(value,'\$.is_pending'),0) = 0 LIMIT 1;")
+            existing_id=$(sqlite3 :memory: <<< "SELECT json_extract(value,'\$.id') FROM json_each('$(sqlq "$keys_json")') WHERE json_extract(value,'\$.name')='$name' AND COALESCE(json_extract(value,'\$.is_application'),0) = 0 AND COALESCE(json_extract(value,'\$.is_legacy'),0) = 0 AND COALESCE(json_extract(value,'\$.is_enabled'),0) = 1 AND COALESCE(json_extract(value,'\$.is_pending'),0) = 0 LIMIT 1;")
             if [[ -n $existing_id ]] && ask_yn "a usable key named $name already exists, reuse it?"; then
                 REVEAL_KEY_ID=$existing_id
                 return 0
@@ -1205,7 +1208,7 @@ create_key_flow() {
         hdr_out=$(mktemp)
         keys_json=$(fetch_keys_json "$hdr_out")
         rm -f "$hdr_out"
-        REVEAL_KEY_ID=$(sqlite3 :memory: "SELECT json_extract(value,'\$.id') FROM json_each('$(sqlq "$keys_json")') WHERE json_extract(value,'\$.name')='$name' AND COALESCE(json_extract(value,'\$.is_application'),0) = 0 AND COALESCE(json_extract(value,'\$.is_legacy'),0) = 0 AND COALESCE(json_extract(value,'\$.is_enabled'),0) = 1 AND COALESCE(json_extract(value,'\$.is_pending'),0) = 0 LIMIT 1;")
+        REVEAL_KEY_ID=$(sqlite3 :memory: <<< "SELECT json_extract(value,'\$.id') FROM json_each('$(sqlq "$keys_json")') WHERE json_extract(value,'\$.name')='$name' AND COALESCE(json_extract(value,'\$.is_application'),0) = 0 AND COALESCE(json_extract(value,'\$.is_legacy'),0) = 0 AND COALESCE(json_extract(value,'\$.is_enabled'),0) = 1 AND COALESCE(json_extract(value,'\$.is_pending'),0) = 0 LIMIT 1;")
         [[ -n $REVEAL_KEY_ID && $REVEAL_KEY_ID != "null" ]] || die "the created key $name did not appear in the key list"
         return 0
     done
@@ -1249,7 +1252,7 @@ rcp_key_step() {
     hdr_out=$(mktemp)
     keys_json=$(fetch_keys_json "$hdr_out")
     rm -f "$hdr_out"
-    openwork_id=$(sqlite3 :memory: "SELECT json_extract(value,'\$.id') FROM json_each('$(sqlq "$keys_json")') WHERE json_extract(value,'\$.name')='$DEFAULT_KEY_NAME' AND COALESCE(json_extract(value,'\$.is_application'),0) = 0 AND COALESCE(json_extract(value,'\$.is_legacy'),0) = 0 AND COALESCE(json_extract(value,'\$.is_enabled'),0) = 1 AND COALESCE(json_extract(value,'\$.is_pending'),0) = 0 LIMIT 1;")
+    openwork_id=$(sqlite3 :memory: <<< "SELECT json_extract(value,'\$.id') FROM json_each('$(sqlq "$keys_json")') WHERE json_extract(value,'\$.name')='$DEFAULT_KEY_NAME' AND COALESCE(json_extract(value,'\$.is_application'),0) = 0 AND COALESCE(json_extract(value,'\$.is_legacy'),0) = 0 AND COALESCE(json_extract(value,'\$.is_enabled'),0) = 1 AND COALESCE(json_extract(value,'\$.is_pending'),0) = 0 LIMIT 1;")
     if [[ -n $openwork_id && $openwork_id != "null" ]]; then
         sub "reusing the existing key named $DEFAULT_KEY_NAME"
         reveal_secret "$openwork_id"

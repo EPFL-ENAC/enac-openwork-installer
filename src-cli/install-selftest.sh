@@ -467,4 +467,68 @@ assert_eq "telemetry disabled" "$(cat "$CONFDIR/free-auto-analytics")" "disabled
 [[ ! -e $CONFDIR/free-auto-journey ]]
 ASSERTS=$((ASSERTS + 1))
 
+# 24. payloads over the 128 KiB per-argument exec cap (MAX_ARG_STRLEN on
+# Linux) still reach sqlite3: the SQL travels on stdin, never in argv.
+openwork_selftest_reset
+BIG_KEYS="$ST_WORK/keys-big.json"
+python3 - "$BIG_KEYS" <<'PY'
+import json, sys
+keys = [{"id": "keys_%d" % i, "name": "Key %04d" % i, "is_enabled": 1, "pool": "BASIC", "note": "n" * 300} for i in range(600)]
+with open(sys.argv[1], "w") as f:
+    f.write(json.dumps(keys, sort_keys=True, separators=(",", ":")))
+PY
+BIG=$(cat "$BIG_KEYS")
+assert_eq "big key list clears the 128 KiB argv cap" "$(( ${#BIG} > 131072 ? 1 : 0 ))" "1"
+assert_eq "big key list validates" "$(jvalid "$BIG" && printf 1 || printf 0)" "1"
+assert_eq "big key list canonicalizes byte for byte" "$(json_canonical "$BIG")" "$BIG"
+assert_eq "big key list stays selectable" "$(keys_selectable_tsv "$BIG" | grep -c . || true)" "600"
+
+# 24b. a big existing env store is merged, every foreign variable kept
+openwork_selftest_reset
+python3 - "$CONFDIR/env.json" <<'PY'
+import json, sys
+variables = [{"key": "ZZZ_%04d" % i, "updatedAt": 1, "value": "v" * 300} for i in range(500)]
+with open(sys.argv[1], "w") as f:
+    f.write(json.dumps({"schemaVersion": 1, "updatedAt": 1, "variables": variables}))
+PY
+assert_eq "big env store clears the argv cap" "$(( $(wc -c < "$CONFDIR/env.json") > 131072 ? 1 : 0 ))" "1"
+write_env_store 'sk-big'
+assert_eq "big env store keeps every variable" "$(grep -c '"key":' "$CONFDIR/env.json")" "501"
+assert_match "big env store holds the token" "$(grep -c '"value": "sk-big"' "$CONFDIR/env.json")" '1'
+
+# 24c. a big opencode.json is merged, not rejected
+openwork_selftest_reset
+mkdir -p "$ST_HOME/.config/opencode"
+python3 - "$ST_HOME/.config/opencode/opencode.json" <<'PY'
+import json, sys
+with open(sys.argv[1], "w") as f:
+    f.write(json.dumps({"model": "x", "extra": ["e" * 300] * 500}))
+PY
+write_opencode_config 'sk-big'
+assert_match "big opencode config merged" "$(grep -c 'epfl-rcp-aiaas' "$ST_HOME/.config/opencode/opencode.json")" '1'
+assert_match "big opencode config kept its keys" "$(grep -c '"model": "x"' "$ST_HOME/.config/opencode/opencode.json")" '1'
+
+# 24d. a big row value is written and read back
+openwork_selftest_reset
+write_runtime_rows
+BIGVAL=$(printf '{"blob":"%s"}' "$(head -c 140000 /dev/zero | tr '\0' 'a')")
+upsert_row "$CONFDIR/runtime.sqlite" openwork_workspace_configs config_json big_ws "$BIGVAL" 1
+assert_eq "big row value round-trips" "$(read_config_row "$CONFDIR/runtime.sqlite" openwork_workspace_configs big_ws config_json)" "$BIGVAL"
+
+# 24e. the reported failure: the key step over a big portal key list
+openwork_selftest_reset
+SESSION_HEADER="sessionid=STUBSESS"
+python3 - "$ST_WORK/keys-big2.json" <<'PY'
+import json, sys
+keys = [{"id": "keys_%d" % i, "name": "Key %04d" % i, "is_enabled": 1, "pool": "BASIC", "note": "n" * 300} for i in range(600)]
+keys.append({"id": "keys_openwork", "name": "OpenWork", "is_enabled": 1})
+with open(sys.argv[1], "w") as f:
+    f.write(json.dumps(keys))
+PY
+SMALL_KEYS_FILE=$ST_KEYS_FILE
+ST_KEYS_FILE="$ST_WORK/keys-big2.json"
+rcp_key_step < /dev/null
+ST_KEYS_FILE=$SMALL_KEYS_FILE
+assert_eq "big key list reused the OpenWork key" "$API_TOKEN" "sk-aaaa1111bbbb2222cccc3333"
+
 printf 'selftest: %s checks passed\n' "$ASSERTS"
