@@ -1024,7 +1024,7 @@ fn electron_user_data_dir(os: &str, config_base: Option<&std::ffi::OsStr>, home:
     root.join(OPENWORK_USER_DATA_DIR)
 }
 
-fn openwork_config_dir() -> Result<PathBuf, AppError> {
+pub(crate) fn openwork_config_dir() -> Result<PathBuf, AppError> {
     let home = util::home_dir()
         .ok_or_else(|| AppError::io("cannot find the home directory of the user"))?;
     let os = std::env::consts::OS;

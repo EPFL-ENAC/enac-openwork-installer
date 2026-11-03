@@ -1,3 +1,5 @@
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -25,6 +27,8 @@ const COOKIE_POLL_MAX_ERRORS: u32 = 15;
 // session key across the Entra ID callback. Expressed in cookie-poll ticks.
 const SESSION_REPROBE_TICKS: u32 = 5;
 const PORTAL_HOST: &str = "portal.rcp.epfl.ch";
+// The portal session outlives a relaunch until the portal expires it.
+const PORTAL_SESSION_FILE: &str = "portal-session";
 
 fn is_portal_page(url: &reqwest::Url) -> bool {
     url.host_str() == Some(PORTAL_HOST) && url.path().starts_with("/aiaas")
@@ -133,6 +137,101 @@ fn session_cookie_header(sessionid: &str, csrftoken: Option<&str>) -> String {
     }
 }
 
+/// Inverse of [`session_cookie_header`]: the persisted header back to the two cookies
+/// the portal calls replay.
+fn parse_session_cookie(header: &str) -> Option<(String, Option<String>)> {
+    let mut sessionid = None;
+    let mut csrftoken = None;
+    for pair in header.trim().split(';') {
+        match pair.trim().split_once('=') {
+            Some(("sessionid", value)) if !value.trim().is_empty() => {
+                sessionid = Some(value.trim().to_string());
+            }
+            Some(("csrftoken", value)) if !value.trim().is_empty() => {
+                csrftoken = Some(value.trim().to_string());
+            }
+            _ => {}
+        }
+    }
+    sessionid.map(|sessionid| (sessionid, csrftoken))
+}
+
+/// The portal session lives in the private app config dir the rest of the installer
+/// already uses, next to the OpenWork config.
+fn portal_session_path() -> Result<PathBuf, AppError> {
+    Ok(crate::openwork::openwork_config_dir()?.join(PORTAL_SESSION_FILE))
+}
+
+fn save_session_cookie(path: &Path, cookie_header: &str) -> Result<(), AppError> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| AppError::io(format!("cannot create {}: {e}", parent.display())))?;
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let mut file = options
+        .open(path)
+        .map_err(|e| AppError::io(format!("cannot create {}: {e}", path.display())))?;
+    file.write_all(cookie_header.as_bytes())
+        .map_err(|e| AppError::io(format!("cannot write {}: {e}", path.display())))?;
+    // The mode above only applies on creation, so an existing file is tightened too.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| AppError::io(format!("cannot restrict {}: {e}", path.display())))?;
+    }
+    Ok(())
+}
+
+fn load_session_cookie(path: &Path) -> Option<String> {
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|content| content.trim().to_string())
+        .filter(|content| !content.is_empty())
+}
+
+fn delete_session_cookie(path: &Path) {
+    let _ = std::fs::remove_file(path);
+}
+
+/// Outcome of the relaunch preload.
+#[derive(Debug, PartialEq, Eq)]
+enum RestoredSession {
+    /// The portal accepts the stored cookie and the session state carries it.
+    Reused,
+    /// The portal rejected the stored cookie, which is now deleted.
+    Expired,
+    /// No stored cookie to try.
+    Absent,
+}
+
+/// Preloads the cookie an earlier run saved, but only once the portal confirms it is
+/// still signed in. The cookie header never leaves the portal host: `url` is built from
+/// [`PORTAL_BASE`] at every call site.
+async fn restore_session(
+    path: &Path,
+    state: &PortalState,
+    client: &reqwest::Client,
+    url: &str,
+) -> RestoredSession {
+    let Some(cookie_header) = load_session_cookie(path) else {
+        return RestoredSession::Absent;
+    };
+    if !session_is_authenticated(client, url, &cookie_header).await {
+        delete_session_cookie(path);
+        return RestoredSession::Expired;
+    }
+    let Some((sessionid, csrftoken)) = parse_session_cookie(&cookie_header) else {
+        delete_session_cookie(path);
+        return RestoredSession::Expired;
+    };
+    state.set_session(&sessionid, csrftoken.as_deref());
+    RestoredSession::Reused
+}
+
 /// What the sign-in poller does with the cookies it just read from the window.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum PollAction {
@@ -171,9 +270,13 @@ impl LoginTracker {
 /// True only for a signed-in portal session: the keys page answers 200 for a logged-in
 /// user and a 302 to /accounts/login for the anonymous session that already owns a
 /// cookie. Redirects stay off so a probe never pulls the Entra ID page.
-async fn session_is_authenticated(client: &reqwest::Client, cookie_header: &str) -> bool {
+async fn session_is_authenticated(
+    client: &reqwest::Client,
+    url: &str,
+    cookie_header: &str,
+) -> bool {
     client
-        .get(format!("{PORTAL_BASE}{KEYS_PATH}"))
+        .get(url)
         .header(reqwest::header::COOKIE, cookie_header)
         .send()
         .await
@@ -290,6 +393,15 @@ impl PortalState {
     }
 }
 
+/// Saves the current cookie so the next launch can skip the sign in. Best effort: a
+/// session that cannot be written must never break a working login.
+fn persist_session(state: &PortalState) {
+    let (Ok(path), Some(cookie_header)) = (portal_session_path(), state.cookie_header()) else {
+        return;
+    };
+    let _ = save_session_cookie(&path, &cookie_header);
+}
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct PortalLoginEvent {
@@ -307,6 +419,17 @@ fn emit_login_result<R: tauri::Runtime>(app: &AppHandle<R>, ok: bool, error: Opt
     );
 }
 
+/// One trace line about the persisted session. The message never carries the cookie.
+fn trace<R: tauri::Runtime>(app: &AppHandle<R>, message: &str) {
+    let _ = app.emit(
+        "backend-log",
+        crate::types::BackendLog {
+            task: "portal".to_string(),
+            message: message.to_string(),
+        },
+    );
+}
+
 #[tauri::command]
 pub async fn portal_start_login<R: tauri::Runtime>(
     app: AppHandle<R>,
@@ -318,6 +441,22 @@ pub async fn portal_start_login<R: tauri::Runtime>(
     let probe_client = portal_client(reqwest::redirect::Policy::none())?;
     if let Some(existing) = app.get_webview_window(LOGIN_WINDOW_LABEL) {
         let _ = existing.destroy();
+    }
+    let generation = state.next_login_generation();
+    let keys_url = format!("{PORTAL_BASE}{KEYS_PATH}");
+    if let Ok(session_path) = portal_session_path() {
+        match restore_session(&session_path, state.inner(), &probe_client, &keys_url).await {
+            RestoredSession::Reused => {
+                trace(&app, "Reusing the portal session saved by the previous run");
+                emit_login_result(&app, true, None);
+                return Ok(());
+            }
+            RestoredSession::Expired => trace(
+                &app,
+                "The portal session saved by the previous run has expired, signing in again",
+            ),
+            RestoredSession::Absent => {}
+        }
     }
     WebviewWindowBuilder::new(
         &app,
@@ -334,7 +473,6 @@ pub async fn portal_start_login<R: tauri::Runtime>(
 
     let login_state = state.inner().clone();
     let poll_app = app.clone();
-    let generation = state.next_login_generation();
     tauri::async_runtime::spawn(async move {
         let deadline = Instant::now() + Duration::from_secs(LOGIN_TIMEOUT_SECS);
         let mut cookie_errors = 0u32;
@@ -406,11 +544,12 @@ pub async fn portal_start_login<R: tauri::Runtime>(
             // the login instead of losing the window after one second.
             let csrftoken = extract_cookie_value(&cookie_strings, "csrftoken");
             let cookie_header = session_cookie_header(&sessionid, csrftoken.as_deref());
-            if !session_is_authenticated(&probe_client, &cookie_header).await {
+            if !session_is_authenticated(&probe_client, &keys_url, &cookie_header).await {
                 continue;
             }
             if login_state.login_generation() == generation {
                 login_state.set_session(&sessionid, csrftoken.as_deref());
+                persist_session(&login_state);
                 emit_login_result(&poll_app, true, None);
                 let _ = window.close();
             }
@@ -894,6 +1033,7 @@ async fn load_portal_form(state: &PortalState) -> Result<FormFetch, AppError> {
         .clone()
         .unwrap_or_else(|| page.final_url.clone());
     state.set_form(&csrf, csrftoken.as_deref(), &form_url, &parsed.units);
+    persist_session(state);
     Ok(FormFetch {
         units: parsed.units,
         existing_open_work_key: find_reusable_key(&keys, OPEN_WORK_KEY_NAME).is_some(),
@@ -1433,5 +1573,129 @@ mod tests {
         assert_eq!(state.csrf(), None);
         assert_eq!(state.token(), None);
         assert_eq!(state.form_url(), None);
+    }
+
+    /// One-shot local server: answers every request with the same status, so the
+    /// restore branch runs without the real portal.
+    fn mock_portal(status: u16) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind a mock portal");
+        let addr = listener.local_addr().expect("mock portal address");
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { return };
+                let mut buffer = [0u8; 2048];
+                let _ = std::io::Read::read(&mut stream, &mut buffer);
+                let reason = if status == 200 { "OK" } else { "Found" };
+                let response = format!(
+                    "HTTP/1.1 {status} {reason}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
+                let _ = std::io::Write::write_all(&mut stream, response.as_bytes());
+            }
+        });
+        format!("http://{addr}")
+    }
+
+    fn cookie_path(tag: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+        let dir = util::temp_dir(tag).expect("temp dir");
+        let path = dir.join(PORTAL_SESSION_FILE);
+        (dir, path)
+    }
+
+    #[test]
+    fn saves_loads_and_deletes_the_session_cookie() {
+        let (dir, path) = cookie_path("portal-cookie");
+        assert_eq!(load_session_cookie(&path), None);
+
+        save_session_cookie(&path, "sessionid=sid42; csrftoken=csrf789").expect("save");
+        assert_eq!(
+            load_session_cookie(&path).as_deref(),
+            Some("sessionid=sid42; csrftoken=csrf789")
+        );
+
+        delete_session_cookie(&path);
+        assert_eq!(load_session_cookie(&path), None);
+        assert!(!path.exists());
+        util::remove_dir(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn session_cookie_file_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let (dir, path) = cookie_path("portal-cookie-mode");
+        save_session_cookie(&path, "sessionid=sid42").expect("save");
+        let mode = std::fs::metadata(&path)
+            .expect("metadata")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
+        util::remove_dir(&dir);
+    }
+
+    #[test]
+    fn parses_a_persisted_cookie_header() {
+        assert_eq!(
+            parse_session_cookie("sessionid=sid42; csrftoken=csrf789"),
+            Some(("sid42".to_string(), Some("csrf789".to_string())))
+        );
+        assert_eq!(
+            parse_session_cookie("sessionid=sid42\n"),
+            Some(("sid42".to_string(), None))
+        );
+        assert_eq!(parse_session_cookie("csrftoken=csrf789"), None);
+        assert_eq!(parse_session_cookie(""), None);
+    }
+
+    #[test]
+    fn reuses_a_session_the_portal_accepts() {
+        let base = mock_portal(200);
+        let (dir, path) = cookie_path("portal-cookie-ok");
+        let header = "sessionid=sid42; csrftoken=csrf789";
+        save_session_cookie(&path, header).expect("save");
+        let state = PortalState::default();
+        let client = portal_client(reqwest::redirect::Policy::none()).expect("client");
+        let url = format!("{base}{KEYS_PATH}");
+
+        let restored =
+            tauri::async_runtime::block_on(restore_session(&path, &state, &client, &url));
+
+        assert_eq!(restored, RestoredSession::Reused);
+        assert_eq!(state.cookie_header().as_deref(), Some(header));
+        assert!(path.exists());
+        util::remove_dir(&dir);
+    }
+
+    #[test]
+    fn drops_a_session_the_portal_rejects() {
+        let base = mock_portal(302);
+        let (dir, path) = cookie_path("portal-cookie-expired");
+        save_session_cookie(&path, "sessionid=sid42; csrftoken=csrf789").expect("save");
+        let state = PortalState::default();
+        let client = portal_client(reqwest::redirect::Policy::none()).expect("client");
+        let url = format!("{base}{KEYS_PATH}");
+
+        let restored =
+            tauri::async_runtime::block_on(restore_session(&path, &state, &client, &url));
+
+        assert_eq!(restored, RestoredSession::Expired);
+        assert_eq!(state.cookie_header(), None);
+        assert!(!path.exists());
+        util::remove_dir(&dir);
+    }
+
+    #[test]
+    fn restore_without_a_stored_cookie_is_absent() {
+        let base = mock_portal(200);
+        let (dir, path) = cookie_path("portal-cookie-absent");
+        let state = PortalState::default();
+        let client = portal_client(reqwest::redirect::Policy::none()).expect("client");
+        let url = format!("{base}{KEYS_PATH}");
+
+        let restored =
+            tauri::async_runtime::block_on(restore_session(&path, &state, &client, &url));
+
+        assert_eq!(restored, RestoredSession::Absent);
+        assert_eq!(state.cookie_header(), None);
+        util::remove_dir(&dir);
     }
 }
