@@ -226,9 +226,9 @@ const rcpKeyRun = async (
       const keyName = answer.keyName?.trim() || choice.suggestedKeyName
       const chosenId = answer.keyId
       emit(
-        chosenId !== undefined || choice.branch === 'existing'
-          ? `Reusing the existing RCP key ${keyName}`
-          : `Creating the RCP key ${keyName}`,
+        chosenId === undefined
+          ? `Creating the RCP key ${keyName}`
+          : `Reusing the existing RCP key ${keyName}`,
       )
       try {
         const created =
@@ -247,6 +247,9 @@ const rcpKeyRun = async (
           existingOpenWorkKey: form.existingOpenWorkKey,
           refused: true,
           chosenUnit: unit,
+          selectableKeyCount: availableKeys.length,
+          // A name the user already gave stays a create request on the next prompt.
+          requestedKeyName: answer.keyName,
         })
         emit(`The portal refused the key name ${keyName}`)
         answer = await ask(choice)

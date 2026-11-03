@@ -186,6 +186,45 @@ describe('chooseKeyBranch', () => {
     expect(existing.showExistingKeys).toBe(false)
     expect(refused.showExistingKeys).toBe(false)
   })
+
+  it('creates a fresh key with the explicit new name over an existing OpenWork key', () => {
+    const choice = chooseKeyBranch({
+      units: ['ENAC', 'STI'],
+      existingOpenWorkKey: true,
+      refused: false,
+      requestedKeyName: 'MyKey',
+    })
+
+    expect(choice.branch).toBe('fresh')
+    expect(choice.suggestedKeyName).toBe('MyKey')
+    expect(choice.showUnitPicker).toBe(true)
+    expect(choice.unit).toBeNull()
+    expect(choice.showExistingKeys).toBe(false)
+  })
+
+  it('keeps the explicit create request after a refusal instead of the paste branch', () => {
+    const choice = chooseKeyBranch({
+      units: ['ENAC'],
+      existingOpenWorkKey: true,
+      refused: true,
+      requestedKeyName: 'MyKey',
+    })
+
+    expect(choice.branch).toBe('fresh')
+    expect(choice.suggestedKeyName).toBe('MyKey')
+  })
+
+  it('treats the default name as no explicit request', () => {
+    const choice = chooseKeyBranch({
+      units: ['ENAC'],
+      existingOpenWorkKey: true,
+      refused: false,
+      requestedKeyName: 'OpenWork',
+    })
+
+    expect(choice.branch).toBe('existing')
+    expect(choice.suggestedKeyName).toBe('OpenWork')
+  })
 })
 
 describe('poolLabel', () => {

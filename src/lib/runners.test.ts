@@ -381,6 +381,40 @@ describe('rcpKey runner', () => {
     })
   })
 
+  it('keeps the create form, not the paste field, when a committed name is refused again', async () => {
+    loginOk({ units: ['ENAC'], existingOpenWorkKey: true })
+    ipc.portalCreateKey
+      .mockRejectedValueOnce({ kind: 'portal-refused', message: 'name taken' })
+      .mockRejectedValueOnce({ kind: 'portal-refused', message: 'name taken' })
+      .mockResolvedValueOnce({ name: 'MyKey2', token: TOKEN })
+    const askKeys = asker((prompt) => Promise.resolve({ keyName: prompt.branch === 'refused' ? 'MyKey' : 'MyKey2' }))
+
+    const { outcome } = await run(runners({ askKeys }), 'rcpKey')
+
+    expect(askKeys).toHaveBeenCalledTimes(2)
+    expect(askKeys.mock.calls[0][0].branch).toBe('refused')
+    expect(askKeys.mock.calls[1][0].branch).toBe('fresh')
+    expect(askKeys.mock.calls[1][0].suggestedKeyName).toBe('MyKey')
+    expect(ipc.portalCreateKey).toHaveBeenLastCalledWith('MyKey2', 'ENAC')
+    expect(outcome).toEqual({
+      status: 'passed',
+      result: { keyName: 'MyKey2', token: TOKEN },
+    })
+  })
+
+  it('names the created key in the trace and forwards its token', async () => {
+    loginOk({ units: ['ENAC', 'STI'], existingOpenWorkKey: false })
+    ipc.portalCreateKey.mockResolvedValue({ name: 'MyKey', token: TOKEN })
+    const askKeys = asker({ unit: 'STI', keyName: 'MyKey' })
+
+    const { outcome, lines } = await run(runners({ askKeys }), 'rcpKey')
+
+    expect(lines.join('\n')).toContain('Creating the RCP key MyKey')
+    expect(lines.join('\n')).toContain('The RCP key MyKey is ready')
+    expect(lines.join('\n')).not.toContain(TOKEN)
+    expect(outcome).toEqual({ status: 'passed', result: { keyName: 'MyKey', token: TOKEN } })
+  })
+
   it('pauses on the manual fallback when the portal login fails', async () => {
     ipc.portalStartLogin.mockImplementation(async () => {
       const handler = ipc.onPortalLogin.mock.calls[0][0]

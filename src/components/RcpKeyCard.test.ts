@@ -36,6 +36,14 @@ const render = (value: KeyPrompt): Promise<string> => {
             create: { nameLabel: 'Key name', submit: 'Create the key' },
             existingKeys: { title: 'Or reuse an existing key' },
             pool: { basic: 'basic', premium: 'premium' },
+            choice: {
+              title: 'An OpenWork key already exists',
+              text: 'Reuse the existing key or create a second key.',
+              pasteLabel: 'Token of the existing key',
+              paste: 'Use the existing key',
+              newNameLabel: 'New key name',
+              createNew: 'Create a second key',
+            },
           },
         },
       },
@@ -87,5 +95,24 @@ describe('RcpKeyCard key list', () => {
 
     expect(markup).not.toContain('AiReviewer')
     expect(markup).not.toContain('Or reuse an existing key')
+  })
+
+  it('renders the plain create form for an explicit new name', async () => {
+    const markup = await render(prompt({ branch: 'fresh', showExistingKeys: false, suggestedKeyName: 'MyKey' }))
+
+    expect(markup).toContain('value="MyKey"')
+    expect(markup).toContain('Create the key')
+    expect(markup).not.toContain('An OpenWork key already exists')
+    expect(markup).not.toContain('Token of the existing key')
+    expect(markup).not.toContain('Create a second key')
+    expect(markup).not.toContain('Or reuse an existing key')
+  })
+
+  it('keeps the existing-key form on the existing branch', async () => {
+    const markup = await render(prompt({ branch: 'existing', showExistingKeys: false }))
+
+    expect(markup).toContain('An OpenWork key already exists')
+    expect(markup).toContain('Token of the existing key')
+    expect(markup).toContain('Create a second key')
   })
 })

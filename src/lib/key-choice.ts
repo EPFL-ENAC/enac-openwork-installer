@@ -11,6 +11,8 @@ export interface KeyChoiceInput {
   chosenUnit?: string | null
   /** How many of the user's own keys the portal offers for reuse. */
   selectableKeyCount?: number
+  /** The key name the user has committed to create. */
+  requestedKeyName?: string | null
 }
 
 export interface KeyChoice {
@@ -32,29 +34,37 @@ export const renderedUnits = (units: readonly string[]): string[] => [
 
 export const chooseKeyBranch = (input: KeyChoiceInput): KeyChoice => {
   const units = renderedUnits(input.units)
+  // A name other than the default is an explicit create request: an existing OpenWork key
+  // and a refusal of another name are then irrelevant.
+  const requested = input.requestedKeyName?.trim()
+  const explicitName = requested && requested !== DEFAULT_KEY_NAME ? requested : null
   // An existing key keeps its unit, so only a new key needs the unit choice.
-  const showUnitPicker = !input.existingOpenWorkKey && units.length > 1
+  const showUnitPicker =
+    units.length > 1 && (explicitName !== null || !input.existingOpenWorkKey)
   const chosen = input.chosenUnit
   const unit = showUnitPicker
     ? chosen && units.includes(chosen)
       ? chosen
       : null
     : (units[0] ?? null)
-  const branch: KeyBranch = input.refused
-    ? 'refused'
-    : input.existingOpenWorkKey
-      ? 'existing'
-      : 'fresh'
+  const branch: KeyBranch = explicitName
+    ? 'fresh'
+    : input.refused
+      ? 'refused'
+      : input.existingOpenWorkKey
+        ? 'existing'
+        : 'fresh'
 
   return {
     branch,
     unit,
     showUnitPicker,
-    // Only a fresh branch offers a reuse list: an existing OpenWork key and a refused
-    // name already have their own path.
-    showExistingKeys: branch === 'fresh' && (input.selectableKeyCount ?? 0) > 0,
+    // Only a fresh branch offers a reuse list: an explicit name, an existing OpenWork key
+    // and a refused name already have their own path.
+    showExistingKeys:
+      branch === 'fresh' && explicitName === null && (input.selectableKeyCount ?? 0) > 0,
     // An existing OpenWork key is reused: its stored secret is revealed, so the default
     // name stays. Only a refused name asks for a second key.
-    suggestedKeyName: branch === 'refused' ? SECOND_KEY_NAME : DEFAULT_KEY_NAME,
+    suggestedKeyName: explicitName ?? (branch === 'refused' ? SECOND_KEY_NAME : DEFAULT_KEY_NAME),
   }
 }
