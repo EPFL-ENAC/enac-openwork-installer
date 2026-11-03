@@ -168,9 +168,9 @@
         border-color: var(--border);
       }
 
-      main {
+      main.wrap {
         padding-top: var(--space-5);
-        padding-bottom: var(--space-6);
+        padding-bottom: var(--space-5);
       }
 
       .intro h1 {
@@ -185,21 +185,6 @@
         margin-top: var(--space-3);
         font-size: var(--fs-lead);
         color: var(--fg-muted);
-      }
-
-      .release {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-2);
-        margin-top: var(--space-3);
-        font-size: var(--fs-sm);
-        color: var(--fg-muted);
-      }
-
-      .release [data-release-version] {
-        font-family: var(--font-mono);
-        font-variant-numeric: tabular-nums;
-        color: var(--fg);
       }
 
       /* The one designed element: the platform switcher. */
@@ -366,17 +351,18 @@
         flex-wrap: wrap;
         gap: var(--space-1) var(--space-3);
         margin-top: var(--space-5);
-        padding-top: var(--space-4);
-        border-top: var(--border-w) solid var(--border);
         font-size: var(--fs-sm);
         color: var(--fg-muted);
       }
 
       footer {
-        padding: var(--space-4) 0 var(--space-5);
-        border-top: var(--border-w) solid var(--border);
+        padding: 0 0 var(--space-5);
         font-size: var(--fs-sm);
         color: var(--fg-muted);
+      }
+
+      footer .wrap {
+        border-top: var(--border-w) solid var(--border);
       }
 
       [hidden] {
@@ -416,14 +402,10 @@
 
     <main class="wrap">
       <div class="intro">
-        <h1 data-i18n="title">Install OpenWork with EPFL AI</h1>
+        <h1 data-i18n="title">Install OpenWork with EPFL inference</h1>
         <p class="lead" data-i18n="lead">
           The installer creates your RCP API key, installs OpenCode and OpenWork, and
           connects them to the EPFL inference service.
-        </p>
-        <p class="release">
-          <span data-i18n="release">Latest release</span>
-          <span data-release-version>0.1.0</span>
         </p>
       </div>
 
@@ -492,8 +474,7 @@
         <div class="terminal">
           <h3 data-i18n="terminal">Or run it in a terminal</h3>
           <div class="code">
-            <pre data-command>curl -fsSL https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/install.sh -o install.sh
-bash install.sh</pre>
+            <pre data-command>curl -fsSL https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/install.sh | bash</pre>
             <button type="button" data-copy data-i18n="copy">Copy</button>
           </div>
           <p class="note" data-i18n="note-terminal">
@@ -531,8 +512,7 @@ bash install.sh</pre>
         <div class="terminal">
           <h3 data-i18n="terminal">Or run it in a terminal</h3>
           <div class="code">
-            <pre data-command>curl -fsSL https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/install.sh -o install.sh
-bash install.sh</pre>
+            <pre data-command>curl -fsSL https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/install.sh | bash</pre>
             <button type="button" data-copy data-i18n="copy">Copy</button>
           </div>
           <p class="note" data-i18n="note-terminal">
@@ -557,10 +537,8 @@ bash install.sh</pre>
 
     <footer>
       <div class="wrap">
-        <span data-i18n="footer"
-          >EPFL ENAC IT4R. The installer and its script are published from the
-          EPFL-ENAC repository on GitHub.</span
-        >
+        <span data-i18n="footer">Made by ENAC-IT4R.</span>
+        <a href="https://github.com/EPFL-ENAC/enac-openwork-installer">GitHub</a>.
       </div>
     </footer>
 
@@ -572,11 +550,10 @@ bash install.sh</pre>
         var panels = Array.prototype.slice.call(document.querySelectorAll('.panel'))
 
         var FR = {
-          title: "Installez OpenWork avec l'IA de l'EPFL",
+          title: "Installez OpenWork avec l'inférence EPFL",
           lead:
             "L'installateur crée votre clé d'API RCP, installe OpenCode et OpenWork, " +
             "puis les connecte au service d'inférence de l'EPFL.",
-          release: 'Dernière version',
           'download-windows': 'Télécharger pour Windows',
           'note-windows':
             'Fichier .exe 64 bits portable, rien à installer. Le système peut ' +
@@ -600,9 +577,7 @@ bash install.sh</pre>
             'lancez-le.',
           verify: 'Vérifiez le téléchargement avec',
           'all-releases': 'Toutes les versions',
-          footer:
-            "EPFL ENAC IT4R. L'installateur et son script sont publiés depuis le " +
-            'dépôt EPFL-ENAC sur GitHub.',
+          footer: 'Réalisé par ENAC-IT4R.',
         }
 
         var text = Array.prototype.slice.call(document.querySelectorAll('[data-i18n]'))
