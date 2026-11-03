@@ -1,5 +1,12 @@
 export const DEFAULT_KEY_NAME = 'OpenWork'
 export const SECOND_KEY_NAME = 'OpenWork-2'
+/** The portal form caps the name at 15 characters. */
+export const KEY_NAME_MAX = 15
+
+const KEY_NAME_PATTERN = /^[A-Za-z0-9_-]{1,15}$/
+
+/** The name rule both the card and the backend enforce. */
+export const validKeyName = (name: string): boolean => KEY_NAME_PATTERN.test(name.trim())
 
 export type KeyBranch = 'fresh' | 'existing' | 'refused'
 export type KeyPoolLabel = 'basic' | 'premium'

@@ -35,6 +35,17 @@ fn is_portal_page(url: &reqwest::Url) -> bool {
 }
 
 const EXCERPT_LIMIT: usize = 400;
+// The portal form caps the key name at 15 characters, so an invalid name is refused
+// before any request instead of being answered by a portal error page.
+const KEY_NAME_MAX: usize = 15;
+
+fn valid_key_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.chars().count() <= KEY_NAME_MAX
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
 // A portal key or a CSRF token is a long run of token characters. Masking every such
 // run keeps a page excerpt safe even when the page echoes a secret this flow never saw.
 const TOKEN_RUN_MIN: usize = 24;
@@ -625,6 +636,14 @@ pub async fn portal_create_key(
     unit: Option<String>,
     state: State<'_, PortalState>,
 ) -> Result<CreatedKey, AppError> {
+    if !valid_key_name(&name) {
+        return Err(AppError::new(
+            "invalid-name",
+            format!(
+                "The key name must be 1 to {KEY_NAME_MAX} characters from A-Z, a-z, 0-9, hyphen and underscore."
+            ),
+        ));
+    }
     if state.csrf().is_none() || state.form_url().is_none() {
         load_portal_form(state.inner()).await?;
     }
@@ -715,6 +734,9 @@ pub async fn portal_create_key(
         ));
     }
     if let Some(message) = extract_error_message(&page.body) {
+        // The portal echoes the refused name, so the message is trimmed and masked
+        // before it reaches the card.
+        let message = sanitize(message.trim(), &state.secrets());
         return Err(portal_failure("portal-refused", message, &detail));
     }
     if status.as_u16() == 401 || status.as_u16() == 403 {
@@ -1525,6 +1547,37 @@ mod tests {
         ))
         .unwrap_err();
         assert_eq!(err.kind, "portal-auth");
+    }
+
+    #[test]
+    fn create_key_rejects_an_invalid_name_before_the_portal() {
+        let app = tauri::test::mock_app();
+        app.manage(PortalState::default());
+        // The default state has no session, so a portal call would answer portal-auth:
+        // an invalid-name answer proves the name was refused before any request.
+        for name in ["", "Bad Name", "a.b", "naive\u{0301}", "abcde12345fghijk"] {
+            let err = tauri::async_runtime::block_on(portal_create_key(
+                name.into(),
+                None,
+                app.state::<PortalState>(),
+            ))
+            .unwrap_err();
+            assert_eq!(err.kind, "invalid-name", "name {name:?}");
+            assert!(err.message.contains("15"), "message: {}", err.message);
+        }
+    }
+
+    #[test]
+    fn valid_name_passes_validation_and_posts_unchanged() {
+        for name in ["OpenWork", "OpenWork-2", "a_b", "ABC123"] {
+            assert!(valid_key_name(name), "name {name:?}");
+            assert_eq!(
+                build_create_body("csrf", name, "10208"),
+                format!(
+                    "csrfmiddlewaretoken=csrf&name={name}&unit=10208&pool=BASIC&usage=PERSONAL"
+                )
+            );
+        }
     }
 
     #[test]

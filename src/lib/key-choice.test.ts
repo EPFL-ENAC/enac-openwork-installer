@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chooseKeyBranch, poolLabel } from './key-choice'
+import { chooseKeyBranch, poolLabel, validKeyName } from './key-choice'
 
 describe('chooseKeyBranch', () => {
   it('creates a fresh key when no OpenWork key exists', () => {
@@ -224,6 +224,31 @@ describe('chooseKeyBranch', () => {
 
     expect(choice.branch).toBe('existing')
     expect(choice.suggestedKeyName).toBe('OpenWork')
+  })
+})
+
+describe('validKeyName', () => {
+  it('accepts letters, digits, hyphen and underscore', () => {
+    expect(validKeyName('OpenWork')).toBe(true)
+    expect(validKeyName('OpenWork-2')).toBe(true)
+    expect(validKeyName('a_b-1')).toBe(true)
+  })
+
+  it('accepts a name at the 15 character limit', () => {
+    expect(validKeyName('abcde12345fghij')).toBe(true)
+  })
+
+  it('rejects a space, a long name and an empty name', () => {
+    expect(validKeyName('Open Work')).toBe(false)
+    expect(validKeyName('abcde12345fghijk')).toBe(false)
+    expect(validKeyName('')).toBe(false)
+    expect(validKeyName('   ')).toBe(false)
+  })
+
+  it('rejects punctuation outside the allowed set and unicode', () => {
+    expect(validKeyName('key.name')).toBe(false)
+    expect(validKeyName('naive\u0301')).toBe(false)
+    expect(validKeyName('key/name')).toBe(false)
   })
 })
 

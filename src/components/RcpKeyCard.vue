@@ -2,10 +2,10 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { EpflButton } from '../kit'
+import { EpflAlert, EpflButton } from '../kit'
 import type { KeyAnswer, KeyPrompt } from '../lib/runners'
 import type { PortalKeyChoice } from '../lib/ipc'
-import { DEFAULT_KEY_NAME, poolLabel, renderedUnits } from '../lib/key-choice'
+import { DEFAULT_KEY_NAME, KEY_NAME_MAX, poolLabel, renderedUnits, validKeyName } from '../lib/key-choice'
 import { PORTAL_KEYS_URL } from '../lib/links'
 
 const props = defineProps<{ prompt: KeyPrompt }>()
@@ -29,7 +29,8 @@ watch(
 
 const unitMissing = computed(() => props.prompt.showUnitPicker && unit.value === '')
 const unitOptions = computed(() => renderedUnits(props.prompt.units))
-const canCreate = computed(() => !unitMissing.value && keyName.value.trim().length > 0)
+const nameInvalid = computed(() => !validKeyName(keyName.value))
+const canCreate = computed(() => !unitMissing.value && !nameInvalid.value)
 const canPaste = computed(() => pasted.value.trim().length > 0)
 
 const create = () => {
@@ -50,6 +51,7 @@ const openKeys = () => openUrl(PORTAL_KEYS_URL).catch(() => {})
     <h3 v-if="prompt.manual" class="rcp-title">{{ t('rcpKey.manual.title') }}</h3>
     <h3 v-else-if="prompt.branch !== 'fresh'" class="rcp-title">{{ t('rcpKey.choice.title') }}</h3>
     <p class="rcp-text">{{ prompt.manual ? t('rcpKey.manual.intro') : t('rcpKey.choice.text') }}</p>
+    <EpflAlert v-if="prompt.error" variant="danger">{{ prompt.error }}</EpflAlert>
 
     <div v-if="prompt.showUnitPicker" class="field">
       <label class="epfl-label" for="rcp-unit">{{ t('rcpKey.unit.label') }}</label>
@@ -108,7 +110,18 @@ const openKeys = () => openUrl(PORTAL_KEYS_URL).catch(() => {})
         <label class="epfl-label" for="rcp-new-name">
           {{ prompt.branch === 'fresh' ? t('rcpKey.create.nameLabel') : t('rcpKey.choice.newNameLabel') }}
         </label>
-        <input id="rcp-new-name" v-model="keyName" class="epfl-input" type="text" />
+        <input
+          id="rcp-new-name"
+          v-model="keyName"
+          class="epfl-input"
+          type="text"
+          :maxlength="KEY_NAME_MAX"
+          :aria-invalid="nameInvalid"
+          aria-describedby="rcp-new-name-error"
+        />
+        <p v-if="nameInvalid" id="rcp-new-name-error" class="field-error">
+          {{ t('rcpKey.create.nameError') }}
+        </p>
       </div>
       <div class="actions">
         <EpflButton :disabled="!canCreate" @click="create">
@@ -157,6 +170,12 @@ const openKeys = () => openUrl(PORTAL_KEYS_URL).catch(() => {})
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+
+.field-error {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--danger);
 }
 
 .manual-steps {

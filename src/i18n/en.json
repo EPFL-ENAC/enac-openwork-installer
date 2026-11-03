@@ -39,7 +39,8 @@
     },
     "create": {
       "nameLabel": "Key name",
-      "submit": "Create the key"
+      "submit": "Create the key",
+      "nameError": "Use 1 to 15 characters from A-Z, a-z, 0-9, hyphen and underscore."
     },
     "existingKeys": {
       "title": "Or reuse one of your existing keys"

@@ -33,7 +33,7 @@ const render = (value: KeyPrompt): Promise<string> => {
         en: {
           rcpKey: {
             unit: { label: 'Unit', placeholder: 'Choose your unit' },
-            create: { nameLabel: 'Key name', submit: 'Create the key' },
+            create: { nameLabel: 'Key name', submit: 'Create the key', nameError: 'Use 1 to 15 characters: A-Z, a-z, 0-9, hyphen and underscore.' },
             existingKeys: { title: 'Or reuse an existing key' },
             pool: { basic: 'basic', premium: 'premium' },
             choice: {
@@ -52,6 +52,14 @@ const render = (value: KeyPrompt): Promise<string> => {
     }),
   )
   return renderToString(app)
+}
+
+const NAME_ERROR = 'Use 1 to 15 characters: A-Z, a-z, 0-9, hyphen and underscore.'
+
+const createButton = (markup: string): string => {
+  const label = markup.indexOf('Create the key')
+  if (label < 0) throw new Error('create button missing')
+  return markup.slice(markup.lastIndexOf('<button', label), label)
 }
 
 describe('RcpKeyCard unit picker', () => {
@@ -75,6 +83,42 @@ describe('RcpKeyCard unit picker', () => {
     const markup = await render(prompt())
 
     expect(markup).not.toContain('Choose your unit')
+  })
+})
+
+describe('RcpKeyCard name validation', () => {
+  it('caps the name field at 15 characters', async () => {
+    const markup = await render(prompt())
+
+    expect(markup).toContain('maxlength="15"')
+  })
+
+  it('rejects a name with a space and disables the create button', async () => {
+    const markup = await render(prompt({ suggestedKeyName: 'Bad Name' }))
+
+    expect(markup).toContain(NAME_ERROR)
+    expect(createButton(markup)).toContain('disabled')
+  })
+
+  it('accepts a name with a hyphen and an underscore', async () => {
+    const markup = await render(prompt({ suggestedKeyName: 'OpenWork_2-a' }))
+
+    expect(markup).toContain('value="OpenWork_2-a"')
+    expect(markup).not.toContain(NAME_ERROR)
+    expect(createButton(markup)).not.toContain('disabled')
+  })
+})
+
+describe('RcpKeyCard create failure', () => {
+  it('shows the failure and keeps the create form with the key list', async () => {
+    const markup = await render(prompt({ error: 'A key with this name already exists.' }))
+
+    expect(markup).toContain('role="alert"')
+    expect(markup).toContain('A key with this name already exists.')
+    expect(markup).toContain('value="OpenWork"')
+    expect(markup).toContain('Create the key')
+    expect(markup).toContain('Or reuse an existing key')
+    expect(markup).toContain('AiReviewer')
   })
 })
 

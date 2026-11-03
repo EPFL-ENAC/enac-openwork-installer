@@ -482,4 +482,47 @@ describe('rcpKey runner', () => {
     expect(ipc.portalCreateKey).toHaveBeenCalledWith('OpenWork', 'ENAC')
     expect(outcome.status).toBe('passed')
   })
+
+  it('keeps the create form with the entered name and unit on a network failure', async () => {
+    loginOk({ units: ['ENAC', 'STI'], existingOpenWorkKey: false })
+    ipc.portalListKeys.mockResolvedValue([{ id: 1462, name: 'OpenWork', pool: 'BASIC' }])
+    ipc.portalCreateKey
+      .mockRejectedValueOnce({ kind: 'network', message: 'The creation request failed.' })
+      .mockResolvedValueOnce({ name: 'MyKey', token: TOKEN })
+    const askKeys = asker({ unit: 'STI', keyName: 'MyKey' })
+
+    const { outcome } = await run(runners({ askKeys }), 'rcpKey')
+
+    expect(askKeys).toHaveBeenCalledTimes(2)
+    const retry = askKeys.mock.calls[1][0]
+    expect(retry.manual).toBe(false)
+    expect(retry.branch).toBe('fresh')
+    expect(retry.suggestedKeyName).toBe('MyKey')
+    expect(retry.unit).toBe('STI')
+    expect(retry.showExistingKeys).toBe(true)
+    expect(retry.availableKeys).toEqual([{ id: 1462, name: 'OpenWork', pool: 'BASIC' }])
+    expect(retry.error).toContain('The creation request failed.')
+    expect(retry.error?.toLowerCase()).toContain('retry')
+    expect(ipc.portalCreateKey).toHaveBeenLastCalledWith('MyKey', 'STI')
+    expect(outcome).toEqual({
+      status: 'passed',
+      result: { keyName: 'MyKey', token: TOKEN },
+    })
+  })
+
+  it('points at a re-login when the session expires during creation', async () => {
+    loginOk({ units: ['ENAC'], existingOpenWorkKey: false })
+    ipc.portalCreateKey
+      .mockRejectedValueOnce({ kind: 'portal-auth', message: 'The session ended.' })
+      .mockResolvedValueOnce({ name: 'OpenWork', token: TOKEN })
+    const askKeys = asker({ keyName: 'OpenWork' })
+
+    const { outcome } = await run(runners({ askKeys }), 'rcpKey')
+
+    const retry = askKeys.mock.calls[0][0]
+    expect(retry.manual).toBe(false)
+    expect(retry.error).toContain('The session ended.')
+    expect(retry.error).toContain('Sign in')
+    expect(outcome.status).toBe('passed')
+  })
 })

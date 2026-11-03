@@ -36,6 +36,8 @@ export interface KeyPrompt extends KeyChoice {
   availableKeys: PortalKeyChoice[]
   /** The portal window failed, so only a pasted token can help. */
   manual: boolean
+  /** Why the last create attempt failed, shown above the same create form. */
+  error?: string | null
 }
 
 export interface KeyAnswer {
@@ -63,6 +65,14 @@ const toAppError = (cause: unknown): AppError => {
 }
 
 const failed = (error: AppError): StepOutcome => ({ status: 'failed', error })
+
+/** Names the cause of a create failure and hints at the next step. */
+const createFailureMessage = (error: AppError): string => {
+  const message = error.message.trim()
+  if (error.kind === 'portal-auth') return `${message} Sign in to the portal again, then retry.`
+  if (error.kind === 'network') return `${message} Check the network connection and retry.`
+  return message
+}
 
 const passed = (result?: StepDonePayload): StepOutcome => ({ status: 'passed', result })
 
@@ -204,8 +214,8 @@ const rcpKeyRun = async (
     } catch {
       emit('The portal key list did not load')
     }
-    const ask = async (choice: KeyChoice): Promise<KeyAnswer> =>
-      bridge.askKeys({ ...choice, units, availableKeys, manual: false })
+    const ask = async (choice: KeyChoice, error?: string | null): Promise<KeyAnswer> =>
+      bridge.askKeys({ ...choice, units, availableKeys, manual: false, error })
 
     let choice = chooseKeyBranch({
       units,
@@ -238,21 +248,32 @@ const rcpKeyRun = async (
         return passed({ keyName: created.name, token: created.token })
       } catch (cause) {
         const error = toAppError(cause)
-        if (error.kind !== 'portal-refused') {
-          emit(`The RCP key could not be created: ${error.message}`)
-          return failed(error)
+        const message = createFailureMessage(error)
+        emit(`The RCP key could not be created: ${error.message}`)
+        if (error.kind === 'portal-refused') {
+          choice = chooseKeyBranch({
+            units,
+            existingOpenWorkKey: form.existingOpenWorkKey,
+            refused: true,
+            chosenUnit: unit,
+            selectableKeyCount: availableKeys.length,
+            // A name the user already gave stays a create request on the next prompt.
+            requestedKeyName: answer.keyName,
+          })
+          emit(`The portal refused the key name ${keyName}`)
+        } else {
+          // Any other failure keeps the same create form, with the name, the unit and
+          // the key list still offered. A manual paste never replaces it.
+          choice = {
+            ...choice,
+            branch: 'fresh',
+            unit,
+            showExistingKeys: availableKeys.length > 0,
+            suggestedKeyName: keyName,
+          }
+          emit('The key choice stays open, retry with the same name')
         }
-        choice = chooseKeyBranch({
-          units,
-          existingOpenWorkKey: form.existingOpenWorkKey,
-          refused: true,
-          chosenUnit: unit,
-          selectableKeyCount: availableKeys.length,
-          // A name the user already gave stays a create request on the next prompt.
-          requestedKeyName: answer.keyName,
-        })
-        emit(`The portal refused the key name ${keyName}`)
-        answer = await ask(choice)
+        answer = await ask(choice, message)
       }
     }
   } finally {

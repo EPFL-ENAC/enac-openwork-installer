@@ -39,7 +39,8 @@
     },
     "create": {
       "nameLabel": "Nom de la clé",
-      "submit": "Créer la clé"
+      "submit": "Créer la clé",
+      "nameError": "Utilisez de 1 à 15 caractères parmi A-Z, a-z, 0-9, le trait d'union et le tiret bas."
     },
     "existingKeys": {
       "title": "Ou réutiliser une de vos clés existantes"
