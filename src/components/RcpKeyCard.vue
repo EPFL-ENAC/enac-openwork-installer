@@ -5,7 +5,7 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import { EpflButton } from '../kit'
 import type { KeyAnswer, KeyPrompt } from '../lib/runners'
 import type { PortalKeyChoice } from '../lib/ipc'
-import { DEFAULT_KEY_NAME, poolLabel } from '../lib/key-choice'
+import { DEFAULT_KEY_NAME, poolLabel, renderedUnits } from '../lib/key-choice'
 import { PORTAL_KEYS_URL } from '../lib/links'
 
 const props = defineProps<{ prompt: KeyPrompt }>()
@@ -28,6 +28,7 @@ watch(
 )
 
 const unitMissing = computed(() => props.prompt.showUnitPicker && unit.value === '')
+const unitOptions = computed(() => renderedUnits(props.prompt.units))
 const canCreate = computed(() => !unitMissing.value && keyName.value.trim().length > 0)
 const canPaste = computed(() => pasted.value.trim().length > 0)
 
@@ -54,7 +55,7 @@ const openKeys = () => openUrl(PORTAL_KEYS_URL).catch(() => {})
       <label class="epfl-label" for="rcp-unit">{{ t('rcpKey.unit.label') }}</label>
       <select id="rcp-unit" v-model="unit" class="epfl-select">
         <option value="" disabled>{{ t('rcpKey.unit.placeholder') }}</option>
-        <option v-for="entry in prompt.units" :key="entry" :value="entry">{{ entry }}</option>
+        <option v-for="entry in unitOptions" :key="entry" :value="entry">{{ entry }}</option>
       </select>
     </div>
 

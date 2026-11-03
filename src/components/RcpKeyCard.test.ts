@@ -46,6 +46,30 @@ const render = (value: KeyPrompt): Promise<string> => {
   return renderToString(app)
 }
 
+describe('RcpKeyCard unit picker', () => {
+  it('shows the placeholder and every unit when several units exist', async () => {
+    const markup = await render(
+      prompt({ showUnitPicker: true, unit: null, units: ['ENAC-IT', 'LSMS'] }),
+    )
+
+    expect(markup).toContain('Choose your unit')
+    expect(markup).toContain('ENAC-IT')
+    expect(markup).toContain('LSMS')
+  })
+
+  it('renders one entry per distinct unit', async () => {
+    const markup = await render(prompt({ showUnitPicker: true, unit: null, units: ['ENAC-IT', 'ENAC-IT'] }))
+
+    expect(markup.match(/>ENAC-IT<\/option>/g)).toHaveLength(1)
+  })
+
+  it('shows no picker when the prompt carries a single unit', async () => {
+    const markup = await render(prompt())
+
+    expect(markup).not.toContain('Choose your unit')
+  })
+})
+
 describe('RcpKeyCard key list', () => {
   it('lists each selectable key with its pool label', async () => {
     const markup = await render(prompt())

@@ -24,6 +24,39 @@ describe('chooseKeyBranch', () => {
     expect(choice.showUnitPicker).toBe(false)
   })
 
+  it('preselects the only unit when the list repeats it', () => {
+    const choice = chooseKeyBranch({
+      units: ['ENAC', 'ENAC'],
+      existingOpenWorkKey: false,
+      refused: false,
+    })
+
+    expect(choice.unit).toBe('ENAC')
+    expect(choice.showUnitPicker).toBe(false)
+  })
+
+  it('ignores blank unit entries', () => {
+    const choice = chooseKeyBranch({
+      units: ['', 'ENAC', '  '],
+      existingOpenWorkKey: false,
+      refused: false,
+    })
+
+    expect(choice.unit).toBe('ENAC')
+    expect(choice.showUnitPicker).toBe(false)
+  })
+
+  it('shows the picker when a repeated unit joins a distinct one', () => {
+    const choice = chooseKeyBranch({
+      units: ['ENAC', 'ENAC', 'STI'],
+      existingOpenWorkKey: false,
+      refused: false,
+    })
+
+    expect(choice.showUnitPicker).toBe(true)
+    expect(choice.unit).toBeNull()
+  })
+
   it('shows the picker and keeps no unit when several units exist', () => {
     const choice = chooseKeyBranch({
       units: ['ENAC', 'STI'],

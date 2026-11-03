@@ -25,15 +25,21 @@ export interface KeyChoice {
 export const poolLabel = (pool: string): KeyPoolLabel =>
   pool.trim().toLowerCase() === 'premium' ? 'premium' : 'basic'
 
+/** The units the picker can render: one per distinct, non-blank label. */
+export const renderedUnits = (units: readonly string[]): string[] => [
+  ...new Set(units.map((unit) => unit.trim()).filter((unit) => unit.length > 0)),
+]
+
 export const chooseKeyBranch = (input: KeyChoiceInput): KeyChoice => {
+  const units = renderedUnits(input.units)
   // An existing key keeps its unit, so only a new key needs the unit choice.
-  const showUnitPicker = input.units.length > 1 && !input.existingOpenWorkKey
+  const showUnitPicker = !input.existingOpenWorkKey && units.length > 1
   const chosen = input.chosenUnit
   const unit = showUnitPicker
-    ? chosen && input.units.includes(chosen)
+    ? chosen && units.includes(chosen)
       ? chosen
       : null
-    : (input.units[0] ?? null)
+    : (units[0] ?? null)
   const branch: KeyBranch = input.refused
     ? 'refused'
     : input.existingOpenWorkKey
