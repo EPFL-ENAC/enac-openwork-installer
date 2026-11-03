@@ -17,6 +17,7 @@ import {
   portalListKeys,
   portalStartLogin,
   portalUseKey,
+  quitApp,
   restrictProviderConfig,
   smokeTest,
 } from './ipc'
@@ -41,6 +42,7 @@ describe('ipc wrappers', () => {
     await portalUseKey(1462)
     await portalClose()
     await restrictProviderConfig()
+    await quitApp()
 
     expect(invoke.mock.calls.map(([command]) => command)).toEqual([
       'opencode_status',
@@ -56,6 +58,7 @@ describe('ipc wrappers', () => {
       'portal_use_key',
       'portal_close',
       'restrict_provider_config',
+      'quit_app',
     ])
   })
 

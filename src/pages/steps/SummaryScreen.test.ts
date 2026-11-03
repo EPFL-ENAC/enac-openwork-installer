@@ -57,6 +57,15 @@ describe('SummaryScreen list', () => {
     expect(markup).toContain(en.summary.launch)
   })
 
+  it('puts the close button after the launch and documentation buttons', async () => {
+    const markup = await render()
+
+    const close = markup.indexOf(`>${en.summary.close}<`)
+    expect(close).toBeGreaterThan(-1)
+    expect(close).toBeGreaterThan(markup.indexOf(`>${en.summary.launch}<`))
+    expect(close).toBeGreaterThan(markup.indexOf(`>${en.summary.docsLink}<`))
+  })
+
   it('keeps the smoke test line and the intro heading off the page', async () => {
     const markup = await render()
 

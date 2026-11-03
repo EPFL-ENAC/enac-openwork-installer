@@ -104,7 +104,8 @@
     "keyName": "Nom de la clé RCP",
     "noKey": "Aucune clé créée",
     "launch": "Lancer OpenWork",
-    "docsLink": "Ouvrir la documentation OpenWork"
+    "docsLink": "Ouvrir la documentation OpenWork",
+    "close": "Fermer l'installateur"
   },
   "common": {
     "error": "Une erreur est survenue : {message}",

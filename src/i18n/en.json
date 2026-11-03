@@ -104,7 +104,8 @@
     "keyName": "RCP key name",
     "noKey": "No key created",
     "launch": "Launch OpenWork",
-    "docsLink": "Open the OpenWork documentation"
+    "docsLink": "Open the OpenWork documentation",
+    "close": "Close the installer"
   },
   "common": {
     "error": "Something went wrong: {message}",

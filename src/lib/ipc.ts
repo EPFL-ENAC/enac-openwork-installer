@@ -87,6 +87,7 @@ export const portalListKeys = () => invoke<PortalKeyChoice[]>('portal_list_keys'
 export const portalUseKey = (id: number) => invoke<CreatedKey>('portal_use_key', { id })
 export const portalClose = () => invoke<void>('portal_close')
 export const restrictProviderConfig = () => invoke<void>('restrict_provider_config')
+export const quitApp = () => invoke<void>('quit_app')
 export const onPortalLogin = (handler: (result: PortalLogin) => void): Promise<UnlistenFn> =>
   listen<PortalLogin>('portal-login', (event) => handler(event.payload))
 export const onBackendLog = (handler: (log: BackendLog) => void): Promise<UnlistenFn> =>

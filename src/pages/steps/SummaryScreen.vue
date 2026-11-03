@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EpflAlert, EpflButton } from '../../kit'
-import { launchOpenwork, openworkStatus, type AppError } from '../../lib/ipc'
+import { launchOpenwork, openworkStatus, quitApp, type AppError } from '../../lib/ipc'
 import { OPENWORK_DOCS_URL } from '../../lib/links'
 import { useFlow } from '../../stores/flow'
 
@@ -90,6 +90,7 @@ const launch = async () => {
       <EpflButton variant="secondary" @click="emit('open-url', OPENWORK_DOCS_URL)">
         {{ t('summary.docsLink') }}
       </EpflButton>
+      <EpflButton variant="secondary" @click="quitApp()">{{ t('summary.close') }}</EpflButton>
     </div>
   </section>
 </template>
