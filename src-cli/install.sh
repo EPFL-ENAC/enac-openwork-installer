@@ -1369,7 +1369,11 @@ main() {
     CONFDIR="${XDG_CONFIG_HOME:-$HOME/.config}/openwork"
     mkdir -p "$CONFDIR"
     LOG_FILE="$CONFDIR/install.log"
-    exec > >(sed -E -e 's/sk-[A-Za-z0-9_-]{6,}/sk-***masked***/g; s/(sessionid=)[^;[:space:]]+/\1***masked***/g; s/(csrftoken=)[^;[:space:]]+/\1***masked***/g' | tee -a "$LOG_FILE") 2>&1
+    # GNU sed takes -u, BSD sed takes -l, to keep the masking filter line-buffered.
+    sed_flags=(-E)
+    [[ $OS == "macos" ]] && sed_flags=(-l "${sed_flags[@]}")
+    [[ $OS == "linux" ]] && sed_flags=(-u "${sed_flags[@]}")
+    exec > >(sed "${sed_flags[@]}" -e 's/sk-[A-Za-z0-9_-]{6,}/sk-***masked***/g; s/(sessionid=)[^;[:space:]]+/\1***masked***/g; s/(csrftoken=)[^;[:space:]]+/\1***masked***/g' | tee -a "$LOG_FILE") 2>&1
     chmod 600 "$LOG_FILE" 2> /dev/null || true
     trap cleanup EXIT
     trap 'exit 130' INT
