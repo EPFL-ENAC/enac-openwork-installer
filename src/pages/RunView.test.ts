@@ -61,19 +61,19 @@ describe('RunView progress bar', () => {
     trace.reset()
   })
 
-  it('counts the completed steps over the four installation steps', async () => {
+  it('counts the completed steps over the three installation steps', async () => {
     trace.setStepStatus('network', 'passed')
     trace.setStepStatus('rcpKey', 'passed')
-    trace.setStepStatus('opencode', 'running')
+    trace.setStepStatus('openwork', 'running')
 
     const markup = await render()
 
     expect(markup).toContain('role="progressbar"')
     expect(markup).toContain('aria-valuemin="0"')
-    expect(markup).toContain('aria-valuemax="4"')
+    expect(markup).toContain('aria-valuemax="3"')
     expect(markup).toContain('aria-valuenow="2"')
-    expect(markup).toContain('Step 3 of 4')
-    expect(count(markup, 'run-progress-seg')).toBe(4)
+    expect(markup).toContain('Step 3 of 3')
+    expect(count(markup, 'run-progress-seg')).toBe(3)
     expect(count(markup, 'is-done')).toBe(3)
   })
 
@@ -83,7 +83,7 @@ describe('RunView progress bar', () => {
     const markup = await render()
 
     expect(markup).toContain('aria-valuenow="0"')
-    expect(markup).toContain('Step 1 of 4')
+    expect(markup).toContain('Step 1 of 3')
     expect(count(markup, 'is-done')).toBe(1)
   })
 
@@ -94,6 +94,17 @@ describe('RunView progress bar', () => {
     const markup = await render()
 
     expect(markup).toContain('aria-valuenow="2"')
+  })
+
+  it('counts a warning step as done', async () => {
+    trace.setStepStatus('network', 'passed')
+    trace.setStepStatus('rcpKey', 'passed')
+    trace.setStepStatus('openwork', 'warning')
+
+    const markup = await render()
+
+    expect(markup).toContain('aria-valuenow="3"')
+    expect(markup).toContain('Step 3 of 3')
   })
 })
 
@@ -134,11 +145,25 @@ describe('RunView paused step', () => {
 
   it('spins the active step that works on its own', async () => {
     trace.reset()
-    trace.setStepStatus('opencode', 'running')
+    trace.setStepStatus('openwork', 'running')
 
     const markup = await render()
 
     expect(markup).toContain('step-spin')
     expect(markup).not.toContain('Waiting for you')
+  })
+})
+
+describe('RunView step cards', () => {
+  it('renders the network, RCP key and OpenWork cards only', async () => {
+    trace.reset()
+
+    const markup = await render()
+
+    expect(count(markup, 'card-title')).toBe(3)
+    expect(markup).toContain(en.stepTitles.network)
+    expect(markup).toContain(en.stepTitles.rcpKey)
+    expect(markup).toContain(en.stepTitles.openwork)
+    expect(markup).not.toContain('OpenCode')
   })
 })

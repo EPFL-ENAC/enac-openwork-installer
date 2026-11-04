@@ -3,12 +3,10 @@ import type { StepOutcome, StepRun } from './orchestrator'
 import { NETWORK_TIMEOUT_MS, PORTAL_URL } from './links'
 import { DEFAULT_KEY_NAME, chooseKeyBranch, type KeyChoice } from './key-choice'
 import {
-  installOpencode,
   installOpenwork,
   configureOpenwork,
   onBackendLog,
   onPortalLogin,
-  opencodeStatus,
   openworkStateStatus,
   openworkStatus,
   portalClose,
@@ -98,7 +96,7 @@ const networkRun = async (emit: (line: string) => void): Promise<StepOutcome> =>
 }
 
 const toolRun = async (
-  id: 'opencode' | 'openwork',
+  id: 'openwork',
   label: string,
   status: () => Promise<InstallStatus>,
   install: () => Promise<InstallResult>,
@@ -303,16 +301,22 @@ const providerRun = async (
   }
 
   emit(outcome.changed ? `The configuration is written to ${outcome.configPath}` : 'The RCP provider is already configured')
-  return passed({ path: outcome.configPath })
+  return passed({ configPath: outcome.configPath })
 }
 
 const smokeRun = async (
   bridge: RunnerBridge,
+  freshInstall: boolean,
   emit: (line: string) => void,
 ): Promise<StepOutcome> => {
-  emit('Running the smoke test')
+  emit('Running the smoke test on the OpenWork engine')
   try {
-    const result = await smokeTest(bridge.results().rcpKey?.token ?? null)
+    const result = await smokeTest(bridge.results().rcpKey?.token ?? null, freshInstall)
+    if (result.skipped) {
+      const detail = result.detail ?? 'the OpenWork engine was not found'
+      emit(`The engine check is skipped: ${detail}`)
+      return { status: 'warning', result: { ok: false, detail } }
+    }
     if (result.ok) {
       emit('The smoke test passed')
       return passed({ ok: true, detail: result.detail ?? undefined })
@@ -326,48 +330,10 @@ const smokeRun = async (
   }
 }
 
-const opencodeRun = async (
-  bridge: RunnerBridge,
+const configureRun = async (
+  token: string,
   emit: (line: string) => void,
 ): Promise<StepOutcome> => {
-  const install = await toolRun('opencode', 'OpenCode', opencodeStatus, installOpencode, emit)
-  if (install.status === 'failed') return install
-
-  const config = await providerRun(bridge, emit)
-  if (config.status === 'failed') return config
-
-  const smoke = await smokeRun(bridge, emit)
-  if (smoke.status === 'failed') return smoke
-
-  return passed({ ...install.result, ...config.result, ...smoke.result })
-}
-
-const openworkRun = async (
-  bridge: RunnerBridge,
-  emit: (line: string) => void,
-): Promise<StepOutcome> => {
-  try {
-    const state = await openworkStateStatus()
-    if (state.broken) {
-      emit(`The OpenWork database blocks the start: ${state.databases.join(', ')}`)
-      return failed({ kind: 'openwork-broken', message: state.databases.join(', ') })
-    }
-  } catch {
-    // A state probe that does not answer must not block the installation.
-  }
-
-  const install = await toolRun('openwork', 'OpenWork', openworkStatus, installOpenwork, emit)
-  if (install.status === 'failed') return install
-
-  const token = bridge.results().rcpKey?.token
-  if (!token) {
-    emit('No RCP key is available')
-    return failed({
-      kind: 'missing-key',
-      message: 'No RCP key is available from the previous step.',
-    })
-  }
-
   emit('Configuring OpenWork to use the RCP provider')
   try {
     const outcome = await configureOpenwork(token)
@@ -396,10 +362,52 @@ const openworkRun = async (
         ? `The default model is set to ${OPENWORK_PROVIDER_ID}/large`
         : `The default model ${OPENWORK_PROVIDER_ID}/large is already set`,
     )
-    return passed({ ...install.result, configDir: outcome.configDir })
+    return passed({ configDir: outcome.configDir })
   } catch (cause) {
     emit('The OpenWork configuration failed')
     return failed(toAppError(cause))
+  }
+}
+
+const openworkRun = async (
+  bridge: RunnerBridge,
+  emit: (line: string) => void,
+): Promise<StepOutcome> => {
+  try {
+    const state = await openworkStateStatus()
+    if (state.broken) {
+      emit(`The OpenWork database blocks the start: ${state.databases.join(', ')}`)
+      return failed({ kind: 'openwork-broken', message: state.databases.join(', ') })
+    }
+  } catch {
+    // A state probe that does not answer must not block the installation.
+  }
+
+  const install = await toolRun('openwork', 'OpenWork', openworkStatus, installOpenwork, emit)
+  if (install.status === 'failed') return install
+
+  const token = bridge.results().rcpKey?.token
+  if (!token) {
+    emit('No RCP key is available')
+    return failed({
+      kind: 'missing-key',
+      message: 'No RCP key is available from the previous step.',
+    })
+  }
+
+  const config = await configureRun(token, emit)
+  if (config.status === 'failed') return config
+
+  const provider = await providerRun(bridge, emit)
+  if (provider.status === 'failed') return provider
+
+  // An OpenWork installed by this run ships the v2 engine, an older install keeps v1.
+  const smoke = await smokeRun(bridge, install.status === 'passed', emit)
+  if (smoke.status === 'failed') return smoke
+
+  return {
+    status: smoke.status === 'warning' ? 'warning' : 'passed',
+    result: { ...install.result, ...config.result, ...provider.result, ...smoke.result },
   }
 }
 
@@ -412,7 +420,6 @@ export const createRunners = (bridge: RunnerBridge): StepRun[] => {
   return [
     step('network', networkRun),
     step('rcpKey', (emit) => rcpKeyRun(bridge, emit)),
-    step('opencode', (emit) => opencodeRun(bridge, emit)),
     step('openwork', (emit) => openworkRun(bridge, emit)),
   ]
 }

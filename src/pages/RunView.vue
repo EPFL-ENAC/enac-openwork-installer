@@ -18,10 +18,11 @@ const { t } = useI18n()
 const router = useRouter()
 const { state, results, keyPrompt, answerKeys, retry } = useFlow()
 
-const SEQUENCE = ['network', 'rcpKey', 'opencode', 'openwork'] as const
+const SEQUENCE = ['network', 'rcpKey', 'openwork'] as const
 const total = SEQUENCE.length
 const done = computed(
-  () => SEQUENCE.filter((id) => ['passed', 'skipped'].includes(trace.stepStatuses[id])).length,
+  () =>
+    SEQUENCE.filter((id) => ['passed', 'skipped', 'warning'].includes(trace.stepStatuses[id])).length,
 )
 const current = computed(() => Math.min(done.value + 1, total))
 const stepLabel = computed(() => t('progress.step', { current: current.value, total }))
@@ -33,6 +34,7 @@ onMounted(() => {
 const detailOf = (id: StepId): string | undefined => {
   const result = results[id]
   if (!result || result.status === 'failed') return undefined
+  if (result.status === 'warning' && result.detail) return result.detail
   if (result.version) return t('run.version', { version: result.version })
   if (result.keyName) return t('run.keyName', { name: result.keyName })
   if (result.path) return result.path
@@ -86,8 +88,6 @@ const detailOf = (id: StepId): string | undefined => {
           {{ t('rcpKey.login.waiting') }}
         </p>
       </StepCard>
-
-      <StepCard id="opencode" :detail="detailOf('opencode')" />
 
       <StepCard id="openwork" :detail="detailOf('openwork')">
         <template #fallback>

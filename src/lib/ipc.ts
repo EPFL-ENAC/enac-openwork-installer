@@ -14,6 +14,8 @@ export interface InstallResult {
 
 export interface SmokeResult {
   ok: boolean
+  /** The OpenWork engine was not found or not extractable, so the check did not run. */
+  skipped: boolean
   detail: string | null
   error: string | null
 }
@@ -68,8 +70,6 @@ export interface PortalLogin {
   error: string | null
 }
 
-export const opencodeStatus = () => invoke<InstallStatus>('opencode_status')
-export const installOpencode = () => invoke<InstallResult>('install_opencode')
 export const openworkStatus = () => invoke<InstallStatus>('openwork_status')
 export const installOpenwork = () => invoke<InstallResult>('install_openwork')
 export const configureOpenwork = (token: string) =>
@@ -77,8 +77,8 @@ export const configureOpenwork = (token: string) =>
 export const launchOpenwork = () => invoke<void>('launch_openwork')
 export const openworkStateStatus = () => invoke<OpenWorkState>('openwork_state_status')
 export const openworkRepairState = () => invoke<StateRepair>('openwork_repair_state')
-export const smokeTest = (token?: string | null) =>
-  invoke<SmokeResult>('smoke_test', { token: token ?? null })
+export const smokeTest = (token?: string | null, freshInstall = false) =>
+  invoke<SmokeResult>('smoke_test', { token: token ?? null, freshInstall })
 export const portalStartLogin = () => invoke<void>('portal_start_login')
 export const portalGetForm = () => invoke<PortalForm>('portal_get_form')
 export const portalCreateKey = (name: string, unit?: string | null) =>

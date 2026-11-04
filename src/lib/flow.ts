@@ -1,12 +1,6 @@
-export type StepId =
-  | 'welcome'
-  | 'network'
-  | 'rcpKey'
-  | 'opencode'
-  | 'openwork'
-  | 'summary'
+export type StepId = 'welcome' | 'network' | 'rcpKey' | 'openwork' | 'summary'
 
-export type StepStatus = 'passed' | 'skipped' | 'failed'
+export type StepStatus = 'passed' | 'skipped' | 'warning' | 'failed'
 
 export interface StepResult {
   status: StepStatus
@@ -14,6 +8,7 @@ export interface StepResult {
   version?: string
   path?: string
   configDir?: string
+  configPath?: string
   ok?: boolean
   detail?: string
   keyName?: string
@@ -24,11 +19,4 @@ export type StepDonePayload = Partial<Omit<StepResult, 'status'>> & { status?: S
 
 export type FlowResults = Partial<Record<StepId, StepResult>>
 
-export const STEP_ORDER: readonly StepId[] = [
-  'welcome',
-  'network',
-  'rcpKey',
-  'opencode',
-  'openwork',
-  'summary',
-]
+export const STEP_ORDER: readonly StepId[] = ['welcome', 'network', 'rcpKey', 'openwork', 'summary']

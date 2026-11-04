@@ -5,10 +5,8 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke }))
 vi.mock('@tauri-apps/api/event', () => ({ listen }))
 
 import {
-  installOpencode,
   installOpenwork,
   launchOpenwork,
-  opencodeStatus,
   onPortalLogin,
   openworkStatus,
   portalClose,
@@ -29,8 +27,6 @@ beforeEach(() => {
 
 describe('ipc wrappers', () => {
   it('maps every command to its Rust name', async () => {
-    await opencodeStatus()
-    await installOpencode()
     await openworkStatus()
     await installOpenwork()
     await launchOpenwork()
@@ -45,8 +41,6 @@ describe('ipc wrappers', () => {
     await quitApp()
 
     expect(invoke.mock.calls.map(([command]) => command)).toEqual([
-      'opencode_status',
-      'install_opencode',
       'openwork_status',
       'install_openwork',
       'launch_openwork',
@@ -60,6 +54,16 @@ describe('ipc wrappers', () => {
       'restrict_provider_config',
       'quit_app',
     ])
+  })
+
+  it('carries the engine choice and the token to the smoke command', async () => {
+    await smokeTest('tok', true)
+
+    expect(invoke).toHaveBeenLastCalledWith('smoke_test', { token: 'tok', freshInstall: true })
+
+    await smokeTest()
+
+    expect(invoke).toHaveBeenLastCalledWith('smoke_test', { token: null, freshInstall: false })
   })
 
   it('forwards the portal-login event payload', async () => {

@@ -31,7 +31,7 @@ describe('trace store', () => {
       trace.setStepStatus('network', status)
       expect(trace.stepStatuses.network).toBe(status)
     }
-    expect(trace.stepStatuses.opencode).toBe('pending')
+    expect(trace.stepStatuses.openwork).toBe('pending')
   })
 
   it('resets entries and statuses', () => {
@@ -67,7 +67,7 @@ describe('secret masking', () => {
 
   it('masks a secret shorter than eight characters', () => {
     registerSecret(SHORT_SECRET)
-    trace.log('opencode', `the request failed for ${SHORT_SECRET}`)
+    trace.log('openwork', `the request failed for ${SHORT_SECRET}`)
 
     expect(trace.entries[0].message).toBe('the request failed for ***')
   })

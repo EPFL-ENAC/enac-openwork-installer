@@ -21,7 +21,7 @@ onMounted(async () => {
   }
 })
 
-const toolText = (id: 'opencode' | 'openwork') => {
+const toolText = (id: 'openwork') => {
   const result = results[id]
   if (!result) return t('summary.notInstalled')
   if (result.status === 'skipped') return t('summary.skipped')
@@ -30,10 +30,12 @@ const toolText = (id: 'opencode' | 'openwork') => {
 
 const configPaths = computed(() =>
   [
-    { label: t('summary.opencode'), path: results.opencode?.path },
+    { label: t('summary.opencode'), path: results.openwork?.configPath },
     { label: t('summary.openwork'), path: results.openwork?.path },
   ].filter((entry) => entry.path),
 )
+
+const smokeSkipped = computed(() => results.openwork?.status === 'warning')
 
 const networkText = computed(() => t(`trace.status.${results.network?.status ?? 'pending'}`))
 
@@ -61,14 +63,12 @@ const launch = async () => {
         <dd>{{ results.rcpKey?.keyName ?? t('summary.noKey') }}</dd>
       </div>
       <div class="summary-row">
-        <dt>{{ t('summary.opencode') }}</dt>
-        <dd>{{ toolText('opencode') }}</dd>
-      </div>
-      <div class="summary-row">
         <dt>{{ t('summary.openwork') }}</dt>
         <dd>{{ toolText('openwork') }}</dd>
       </div>
     </dl>
+
+    <EpflAlert v-if="smokeSkipped" variant="info">{{ t('summary.smokeSkipped') }}</EpflAlert>
 
     <div v-if="configPaths.length" class="paths">
       <div class="epfl-eyebrow">{{ t('summary.configPaths') }}</div>

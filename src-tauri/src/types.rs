@@ -19,6 +19,8 @@ pub struct InstallResult {
 #[serde(rename_all = "camelCase")]
 pub struct SmokeResult {
     pub ok: bool,
+    /// The engine was not found or not extractable, so the check did not run.
+    pub skipped: bool,
     pub detail: Option<String>,
     pub error: Option<String>,
 }

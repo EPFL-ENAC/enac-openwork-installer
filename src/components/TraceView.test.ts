@@ -39,12 +39,12 @@ describe('TraceView side log', () => {
 
   it('keeps the full step trace off the run screen', async () => {
     trace.reset()
-    trace.setStepStatus('opencode', 'running')
+    trace.setStepStatus('openwork', 'running')
 
     const markup = await render()
 
     expect(markup).not.toContain('trace-step')
     expect(markup).not.toContain(en.trace.status.running)
-    expect(markup).not.toContain(en.stepTitles.opencode)
+    expect(markup).not.toContain(en.stepTitles.openwork)
   })
 })

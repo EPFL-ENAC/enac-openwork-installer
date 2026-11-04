@@ -1,4 +1,3 @@
-mod opencode;
 mod openwork;
 mod openwork_state;
 mod portal;
@@ -20,8 +19,6 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            opencode::opencode_status,
-            opencode::install_opencode,
             prereq::linux_prereq_status,
             openwork::openwork_status,
             openwork::install_openwork,

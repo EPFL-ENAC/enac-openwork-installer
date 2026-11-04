@@ -9,7 +9,7 @@
   },
   "welcome": {
     "title": "Bienvenue",
-    "intro": "Cet outil installe OpenCode et OpenWork sur votre ordinateur.",
+    "intro": "Cet outil installe OpenWork sur votre ordinateur.",
     "credentials": "Il vous sera demandé de saisir vos identifiants EPFL pour créer ou récupérer votre clé d'API d'inférence LLM.",
     "start": "Commencer"
   },
@@ -87,7 +87,7 @@
     "missing": "OpenWork n'est pas installé sur cet ordinateur.",
     "stateBrokenTitle": "OpenWork ne démarre pas",
     "stateBrokenDetail": "OpenWork s'arrête avec le message : Database is not empty and has no session table.",
-    "stateBrokenCause": "La cause est un fichier de base de données créé par une autre version d'OpenCode. OpenWork attend sa propre structure dans ce fichier et s'arrête donc au démarrage.",
+    "stateBrokenCause": "La cause est un fichier de base de données créé par une autre version du moteur. OpenWork attend sa propre structure dans ce fichier et s'arrête donc au démarrage.",
     "stateBrokenFix": "Cette installation peut déplacer le fichier vers une sauvegarde et le vider. OpenWork crée ensuite une nouvelle base de données à son prochain démarrage. La sauvegarde garde l'ancien contenu, rien n'est supprimé.",
     "stateConsent": "J'accepte que cette installation déplace le fichier de base de données vers une sauvegarde.",
     "stateRepair": "Sauvegarder et vider",
@@ -100,6 +100,7 @@
     "notInstalled": "Non installé",
     "version": "Version {version}",
     "skipped": "Ignoré (déjà installé)",
+    "smokeSkipped": "Le test du moteur a été ignoré, aucun moteur OpenWork n'a été trouvé. L'installation est terminée.",
     "configPaths": "Chemins des fichiers de configuration",
     "keyName": "Nom de la clé RCP",
     "noKey": "Aucune clé créée",
@@ -119,13 +120,13 @@
       "running": "En cours",
       "passed": "Réussi",
       "skipped": "Ignoré",
+      "warning": "Avertissement",
       "failed": "Échec"
     }
   },
   "stepTitles": {
     "welcome": "Bienvenue",
     "network": "Vérification du réseau",
-    "opencode": "OpenCode",
     "rcpKey": "Clé RCP",
     "openwork": "OpenWork",
     "summary": "Résumé"

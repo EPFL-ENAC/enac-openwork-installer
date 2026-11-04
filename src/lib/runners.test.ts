@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const ipc = vi.hoisted(() => ({
-  opencodeStatus: vi.fn(),
-  installOpencode: vi.fn(),
   openworkStatus: vi.fn(),
   installOpenwork: vi.fn(),
   configureOpenwork: vi.fn(),
@@ -77,8 +75,8 @@ beforeEach(() => {
     defaultModelWorkspaceId: 'ws_05771fd9f545',
     defaultModelWritten: true,
   })
-  ipc.opencodeStatus.mockResolvedValue({ installed: true, version: '1.2.3', path: '/usr/bin/opencode' })
-  ipc.smokeTest.mockResolvedValue({ ok: true, detail: 'pong', error: null })
+  ipc.openworkStatus.mockResolvedValue({ installed: true, version: '1.2.3', path: '/usr/bin/openwork' })
+  ipc.smokeTest.mockResolvedValue({ ok: true, skipped: false, detail: 'pong', error: null })
   ipc.portalClose.mockResolvedValue(undefined)
   ipc.portalListKeys.mockResolvedValue([])
   provider.writeProviderConfig.mockResolvedValue({
@@ -91,8 +89,8 @@ beforeEach(() => {
 })
 
 describe('runner order', () => {
-  it('runs the RCP key before the merged OpenCode step', () => {
-    expect(runners().map((entry) => entry.id)).toEqual(['network', 'rcpKey', 'opencode', 'openwork'])
+  it('runs the RCP key before the OpenWork step, with no standalone OpenCode step', () => {
+    expect(runners().map((entry) => entry.id)).toEqual(['network', 'rcpKey', 'openwork'])
   })
 })
 
@@ -123,59 +121,69 @@ describe('network runner', () => {
   })
 })
 
-describe('merged opencode runner', () => {
-  it('skips the install sub-action, then writes the config and runs the smoke test', async () => {
-    const { outcome, lines } = await run(runners({ results: withKey }), 'opencode')
+describe('openwork engine check', () => {
+  it('writes the shared OpenCode config, then smokes the bundled engine of an existing install', async () => {
+    const { outcome, lines } = await run(runners({ results: withKey }), 'openwork')
 
-    expect(ipc.installOpencode).not.toHaveBeenCalled()
     expect(provider.writeProviderConfig).toHaveBeenCalledWith(TOKEN)
-    expect(ipc.smokeTest).toHaveBeenCalledWith(TOKEN)
-    expect(outcome.status).toBe('passed')
-    expect(outcome).toMatchObject({ result: { version: '1.2.3', path: CONFIG_PATH, ok: true } })
+    expect(ipc.smokeTest).toHaveBeenCalledWith(TOKEN, false)
+    expect(outcome).toEqual({
+      status: 'passed',
+      result: {
+        version: '1.2.3',
+        path: '/usr/bin/openwork',
+        configDir: '~/.config/openwork',
+        configPath: CONFIG_PATH,
+        ok: true,
+        detail: 'pong',
+      },
+    })
 
     const text = lines.join('\n')
-    expect(text).toContain('already installed, skip')
     expect(text).toContain(`The configuration is written to ${CONFIG_PATH}`)
     expect(text).toContain('The smoke test passed')
     expect(text).not.toContain(TOKEN)
   })
 
-  it('installs a missing OpenCode and forwards only its backend-log lines', async () => {
-    ipc.opencodeStatus.mockResolvedValue({ installed: false, version: null, path: null })
-    ipc.onBackendLog.mockImplementation(async (handler: (log: { task: string; message: string }) => void) => {
-      handler({ task: 'opencode', message: 'downloading' })
-      handler({ task: 'openwork', message: 'other task' })
-      return () => {}
-    })
-    ipc.installOpencode.mockResolvedValue({ version: '1.2.3', path: '/usr/local/bin/opencode' })
+  it('asks for the v2 engine after an install performed by this run', async () => {
+    ipc.openworkStatus.mockResolvedValue({ installed: false, version: null, path: null })
+    ipc.installOpenwork.mockResolvedValue({ version: '0.18.63', path: '/opt/openwork' })
 
-    const { outcome, lines } = await run(runners({ results: withKey }), 'opencode')
+    await run(runners({ results: withKey }), 'openwork')
+
+    expect(ipc.smokeTest).toHaveBeenCalledWith(TOKEN, true)
+  })
+
+  it('skips the engine check with a warning when the engine is not found', async () => {
+    ipc.smokeTest.mockResolvedValue({
+      ok: false,
+      skipped: true,
+      detail: 'no OpenWork engine was found',
+      error: null,
+    })
+
+    const { outcome, lines } = await run(runners({ results: withKey }), 'openwork')
 
     expect(outcome).toEqual({
-      status: 'passed',
-      result: { version: '1.2.3', path: CONFIG_PATH, ok: true, detail: 'pong' },
+      status: 'warning',
+      result: {
+        version: '1.2.3',
+        path: '/usr/bin/openwork',
+        configDir: '~/.config/openwork',
+        configPath: CONFIG_PATH,
+        ok: false,
+        detail: 'no OpenWork engine was found',
+      },
     })
-    expect(lines).toContain('downloading')
-    expect(lines).not.toContain('other task')
-    expect(lines.join('\n')).toContain('OpenCode 1.2.3 is installed')
+    const text = lines.join('\n')
+    expect(text).toContain('The engine check is skipped: no OpenWork engine was found')
+    expect(text).not.toContain('The smoke test failed')
   })
 
-  it('stops before the config write when the install sub-action fails', async () => {
-    ipc.opencodeStatus.mockResolvedValue({ installed: false, version: null, path: null })
-    ipc.installOpencode.mockRejectedValue({ kind: 'install', message: 'no disk' })
-
-    const { outcome, lines } = await run(runners({ results: withKey }), 'opencode')
-
-    expect(outcome).toEqual({ status: 'failed', error: { kind: 'install', message: 'no disk' } })
-    expect(provider.writeProviderConfig).not.toHaveBeenCalled()
-    expect(ipc.smokeTest).not.toHaveBeenCalled()
-    expect(lines.join('\n')).toContain('OpenCode installation failed')
-  })
-
-  it('stops before the smoke test when the config write fails and names the sub-action', async () => {
+  it('stops before the engine check when the config write fails and names the sub-action', async () => {
     provider.writeProviderConfig.mockResolvedValue({ ok: false, code: 'io', detail: 'disk full' })
 
-    const { outcome, lines } = await run(runners({ results: withKey }), 'opencode')
+    const { outcome, lines } = await run(runners({ results: withKey }), 'openwork')
 
     expect(outcome).toEqual({ status: 'failed', error: { kind: 'io', message: 'disk full' } })
     expect(ipc.smokeTest).not.toHaveBeenCalled()
@@ -183,16 +191,16 @@ describe('merged opencode runner', () => {
   })
 
   it('fails with the smoke error kind and names the sub-action', async () => {
-    ipc.smokeTest.mockResolvedValue({ ok: false, detail: null, error: 'HTTP 401' })
+    ipc.smokeTest.mockResolvedValue({ ok: false, skipped: false, detail: null, error: 'HTTP 401' })
 
-    const { outcome, lines } = await run(runners({ results: withKey }), 'opencode')
+    const { outcome, lines } = await run(runners({ results: withKey }), 'openwork')
 
     expect(outcome).toEqual({ status: 'failed', error: { kind: 'smoke', message: 'HTTP 401' } })
     expect(lines.join('\n')).toContain('The smoke test failed: HTTP 401')
   })
 
   it('fails without a key from the previous step', async () => {
-    const { outcome, lines } = await run(runners(), 'opencode')
+    const { outcome, lines } = await run(runners(), 'openwork')
 
     expect(outcome).toEqual({
       status: 'failed',
@@ -206,13 +214,11 @@ describe('merged opencode runner', () => {
 
 describe('openwork runner', () => {
   it('configures the provider after a skipped install and reports the config dir', async () => {
-    ipc.openworkStatus.mockResolvedValue({ installed: true, version: '1.2.3', path: '/usr/bin/openwork' })
-
     const { outcome, lines } = await run(runners({ results: withKey }), 'openwork')
 
     expect(ipc.installOpenwork).not.toHaveBeenCalled()
     expect(ipc.configureOpenwork).toHaveBeenCalledWith(TOKEN)
-    expect(outcome).toEqual({
+    expect(outcome).toMatchObject({
       status: 'passed',
       result: { version: '1.2.3', path: '/usr/bin/openwork', configDir: '~/.config/openwork' },
     })
@@ -233,7 +239,7 @@ describe('openwork runner', () => {
 
     expect(ipc.installOpenwork).toHaveBeenCalled()
     expect(ipc.configureOpenwork).toHaveBeenCalledWith(TOKEN)
-    expect(outcome).toEqual({
+    expect(outcome).toMatchObject({
       status: 'passed',
       result: { version: '0.18.63', path: '/opt/openwork', configDir: '~/.config/openwork' },
     })

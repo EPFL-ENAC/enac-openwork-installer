@@ -1,14 +1,164 @@
-use crate::opencode;
+use crate::openwork;
 use crate::types::{AppError, SmokeResult};
 use crate::util::{self, Logger};
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub const PROVIDER: &str = "epfl-rcp-aiaas";
 pub const MODEL: &str = "epfl-rcp-aiaas/epfl-aiaas/small";
 const TIMEOUT: Duration = Duration::from_secs(60);
+const VERSION_TIMEOUT: Duration = Duration::from_secs(30);
+const EXTRACT_TIMEOUT: Duration = Duration::from_secs(300);
 const PROMPT: &str = "Reply with the single word OK.";
 const DETAIL_LIMIT: usize = 500;
 const OUTPUT_LINE_LIMIT: usize = 10;
+const SIDECARS: &str = "sidecars";
+const ENGINE_V1: &str = "opencode";
+const ENGINE_V2: &str = "opencode2";
+const V2_MARKER: &str = "engine-v2-preview.json";
+const V2_ENV: &str = "OPENWORK_ENGINE_V2_PREVIEW";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Engine {
+    V1,
+    V2,
+}
+
+impl Engine {
+    fn name(self) -> &'static str {
+        match self {
+            Engine::V1 => ENGINE_V1,
+            Engine::V2 => ENGINE_V2,
+        }
+    }
+}
+
+/// A fresh install of this run ships the v2 engine. An older install keeps v1
+/// unless the preview marker or the environment variable opts in.
+pub fn engine_for(fresh_install: bool, marker: bool, env_v2: bool) -> Engine {
+    if fresh_install || marker || env_v2 {
+        Engine::V2
+    } else {
+        Engine::V1
+    }
+}
+
+/// The bundle ships the plain name and arch-suffixed variants; the plain name wins.
+pub fn candidates(dir: &Path, engine: Engine, arch: &str, windows: bool) -> Vec<PathBuf> {
+    let exe = if windows { ".exe" } else { "" };
+    let mut names = vec![format!("{}{exe}", engine.name())];
+    for suffix in arch_suffixes(arch) {
+        names.push(format!("{}-{suffix}{exe}", engine.name()));
+    }
+    names.into_iter().map(|name| dir.join(name)).collect()
+}
+
+fn arch_suffixes(arch: &str) -> &'static [&'static str] {
+    match arch {
+        "aarch64" => &["aarch64", "arm64"],
+        "x86_64" => &["x86_64", "x64"],
+        _ => &[],
+    }
+}
+
+/// Sidecars live under `resources/sidecars`: inside the app bundle on macOS,
+/// inside the install directory of a bare folder, next to an executable.
+pub fn sidecar_dir(install: &Path) -> PathBuf {
+    let ext = install
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or_default();
+    if ext.eq_ignore_ascii_case("app") {
+        return install.join("Contents").join("Resources").join(SIDECARS);
+    }
+    if ext.eq_ignore_ascii_case("exe") || ext.eq_ignore_ascii_case("appimage") {
+        return install
+            .parent()
+            .unwrap_or(install)
+            .join("resources")
+            .join(SIDECARS);
+    }
+    install.join("resources").join(SIDECARS)
+}
+
+pub fn pick(dir: &Path, engine: Engine) -> Option<PathBuf> {
+    candidates(dir, engine, util::arch(), cfg!(windows))
+        .into_iter()
+        .find(|path| path.is_file())
+}
+
+fn is_appimage(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("appimage"))
+}
+
+/// The AppImage keeps the sidecars inside its squashfs, so unpack them once into
+/// a temp directory and run the extracted copy. The caller removes the directory.
+async fn extract_sidecars(appimage: &Path) -> Option<(PathBuf, PathBuf)> {
+    let dir = util::temp_dir("sidecars").ok()?;
+    let pattern = format!("resources/{SIDECARS}/*");
+    let output = util::run_in(
+        appimage,
+        &["--appimage-extract", &pattern],
+        EXTRACT_TIMEOUT,
+        &[],
+        Some(dir.clone()),
+    )
+    .await
+    .ok()?;
+    let extracted = dir.join("squashfs-root").join("resources").join(SIDECARS);
+    if output.success && extracted.is_dir() {
+        return Some((dir, extracted));
+    }
+    util::remove_dir(&dir);
+    None
+}
+
+/// Finds the engine binary and, for an AppImage, the temp directory that holds it.
+async fn locate(install: &Path, engine: Engine) -> Option<(PathBuf, Option<PathBuf>)> {
+    if !is_appimage(install) {
+        return pick(&sidecar_dir(install), engine).map(|path| (path, None));
+    }
+    let (dir, sidecars) = extract_sidecars(install).await?;
+    match pick(&sidecars, engine) {
+        Some(path) => Some((path, Some(dir))),
+        None => {
+            util::remove_dir(&dir);
+            None
+        }
+    }
+}
+
+fn v2_marker() -> bool {
+    util::home_dir()
+        .map(|home| home.join(".config").join("openwork").join(V2_MARKER))
+        .is_some_and(|path| path.is_file())
+}
+
+fn v2_env() -> bool {
+    std::env::var(V2_ENV).is_ok_and(|value| !value.is_empty() && value != "0")
+}
+
+async fn version_at(binary: &Path) -> Option<String> {
+    let output = util::run(binary, &["--version"], VERSION_TIMEOUT)
+        .await
+        .ok()?;
+    parse_version(&output.stdout).or_else(|| parse_version(&output.stderr))
+}
+
+pub fn parse_version(output: &str) -> Option<String> {
+    output.split_whitespace().find_map(|token| {
+        let candidate = token
+            .trim_start_matches(['v', 'V'])
+            .trim_end_matches(['.', ',', ')', ']', ';']);
+        let first_digit = candidate.starts_with(|c: char| c.is_ascii_digit());
+        let version_like = candidate.contains('.')
+            && candidate
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+' | '~'));
+        (first_digit && version_like).then(|| candidate.to_string())
+    })
+}
 
 fn smoke_args() -> [&'static str; 5] {
     ["run", "--standalone", "--model", MODEL, PROMPT]
@@ -96,23 +246,38 @@ fn failure_message(args: &[&str], version: &str, output: &util::CommandOutput) -
 pub async fn smoke_test(
     app: tauri::AppHandle,
     token: Option<String>,
+    fresh_install: bool,
 ) -> Result<SmokeResult, AppError> {
     let secret = token.as_deref();
-    let Some(binary) = opencode::binary_path() else {
-        return Ok(failed(
-            "OpenCode is not installed, run the OpenCode step first",
-            secret,
-        ));
+    let status = openwork::openwork_status().await?;
+    let Some(install) = status.path.map(PathBuf::from) else {
+        return Ok(skipped("OpenWork is not installed"));
     };
 
-    // Standalone mode keeps the check off the shared OpenCode server, so a stale
-    // background server cannot fail the test. The key comes from the global
-    // config, never from the command line.
+    let engine = engine_for(fresh_install, v2_marker(), v2_env());
+    let Some((binary, cleanup)) = locate(&install, engine).await else {
+        return Ok(skipped(&format!(
+            "the OpenWork {} engine was not found",
+            engine.name()
+        )));
+    };
+
+    // The sidecar reads its key from the environment, never from the command
+    // line. Standalone mode keeps the check off the shared OpenCode server, so a
+    // stale background server cannot fail the test.
     let args = smoke_args();
-    let version = opencode::version_at(&binary)
+    let version = version_at(&binary)
         .await
         .unwrap_or_else(|| "unknown".to_string());
-    let output = match util::run(&binary, &args, TIMEOUT).await {
+    let mut envs: Vec<(&str, String)> = Vec::new();
+    if let Some(token) = secret {
+        envs.push((openwork::OPENWORK_ENV_KEY, token.to_string()));
+    }
+    let output = util::run_in(&binary, &args, TIMEOUT, &envs, None).await;
+    if let Some(dir) = cleanup {
+        util::remove_dir(&dir);
+    }
+    let output = match output {
         Ok(output) => output,
         Err(error) => {
             return Ok(failed(
@@ -133,6 +298,7 @@ pub async fn smoke_test(
 
     Ok(SmokeResult {
         ok: true,
+        skipped: false,
         detail: Some(format!(
             "{MODEL} answered: {}",
             truncate(&reply, DETAIL_LIMIT)
@@ -141,9 +307,19 @@ pub async fn smoke_test(
     })
 }
 
+fn skipped(reason: &str) -> SmokeResult {
+    SmokeResult {
+        ok: false,
+        skipped: true,
+        detail: Some(format!("the engine check is skipped: {reason}")),
+        error: None,
+    }
+}
+
 fn failed(message: impl Into<String>, secret: Option<&str>) -> SmokeResult {
     SmokeResult {
         ok: false,
+        skipped: false,
         detail: None,
         error: Some(util::mask_secret(&message.into(), secret)),
     }
@@ -161,6 +337,77 @@ mod tests {
     use super::*;
 
     const FIXTURE_TOKEN: &str = "sk-live-fixture-0123456789";
+
+    #[test]
+    fn a_fresh_install_runs_the_v2_engine_and_an_older_one_v1() {
+        assert_eq!(engine_for(true, false, false), Engine::V2);
+        assert_eq!(engine_for(false, false, false), Engine::V1);
+        assert_eq!(engine_for(false, true, false), Engine::V2);
+        assert_eq!(engine_for(false, false, true), Engine::V2);
+    }
+
+    #[test]
+    fn the_plain_sidecar_name_comes_before_the_arch_suffixed_ones() {
+        let paths = candidates(Path::new("/w/sidecars"), Engine::V2, "aarch64", false);
+        assert_eq!(
+            paths,
+            vec![
+                PathBuf::from("/w/sidecars/opencode2"),
+                PathBuf::from("/w/sidecars/opencode2-aarch64"),
+                PathBuf::from("/w/sidecars/opencode2-arm64"),
+            ]
+        );
+
+        let exe = candidates(Path::new("C:/w"), Engine::V1, "x86_64", true);
+        assert_eq!(exe[0], PathBuf::from("C:/w/opencode.exe"));
+        assert_eq!(exe[1], PathBuf::from("C:/w/opencode-x86_64.exe"));
+    }
+
+    #[test]
+    fn the_sidecar_dir_follows_the_bundle_layout() {
+        assert_eq!(
+            sidecar_dir(Path::new("/Applications/OpenWork.app")),
+            PathBuf::from("/Applications/OpenWork.app/Contents/Resources/sidecars")
+        );
+        assert_eq!(
+            sidecar_dir(Path::new("/opt/openwork/OpenWork.exe")),
+            PathBuf::from("/opt/openwork/resources/sidecars")
+        );
+        assert_eq!(
+            sidecar_dir(Path::new("/opt/openwork")),
+            PathBuf::from("/opt/openwork/resources/sidecars")
+        );
+    }
+
+    #[test]
+    fn pick_returns_the_first_sidecar_that_exists() {
+        let dir = util::temp_dir("sidecar-pick").expect("a temp dir");
+        std::fs::write(dir.join("opencode2"), "x").expect("a fixture sidecar");
+
+        assert_eq!(pick(&dir, Engine::V2), Some(dir.join("opencode2")));
+        assert_eq!(pick(&dir, Engine::V1), None);
+
+        util::remove_dir(&dir);
+    }
+
+    #[test]
+    fn a_missing_engine_is_a_skip_with_a_readable_detail() {
+        let result = skipped("the OpenWork sidecars are absent");
+
+        assert!(!result.ok);
+        assert!(result.skipped);
+        assert_eq!(result.error, None);
+        assert!(result
+            .detail
+            .expect("a skip carries a detail")
+            .contains("the OpenWork sidecars are absent"));
+    }
+
+    #[test]
+    fn parses_a_version_out_of_the_sidecar_banner() {
+        assert_eq!(parse_version("opencode2 2.2.0"), Some("2.2.0".to_string()));
+        assert_eq!(parse_version("no version here"), None);
+    }
 
     #[test]
     fn failure_and_detail_stay_readable() {

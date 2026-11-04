@@ -41,7 +41,7 @@ const steps = (bridge: RunnerBridge): StepRun[] => [
     },
   },
   {
-    id: 'opencode',
+    id: 'openwork',
     run: async () => {
       const token = bridge.results().rcpKey?.token
       return token
@@ -82,7 +82,7 @@ describe('flow store', () => {
       token: 'tok-123456789',
       keyName: 'OpenWork-2',
     })
-    expect(store.results.opencode).toEqual({
+    expect(store.results.openwork).toEqual({
       status: 'passed',
       path: '~/.config/opencode/opencode.json',
     })
@@ -97,7 +97,7 @@ describe('flow store', () => {
       return [
         { id: 'network', run: async () => ({ status: 'passed' }) },
         {
-          id: 'opencode',
+          id: 'openwork',
           run: async () => {
             attempts += 1
             return attempts === 1
@@ -112,15 +112,15 @@ describe('flow store', () => {
     await store.start()
 
     expect(store.state.value).toBe('failed')
-    expect(store.failedStep.value).toBe('opencode')
-    expect(store.results.opencode).toEqual({ status: 'failed', detail: 'boom', kind: 'install' })
+    expect(store.failedStep.value).toBe('openwork')
+    expect(store.results.openwork).toEqual({ status: 'failed', detail: 'boom', kind: 'install' })
 
     await store.retry()
 
     expect(store.state.value).toBe('done')
     expect(store.failedStep.value).toBeNull()
-    expect(store.results.opencode).toEqual({ status: 'passed', version: '1.2.3' })
-    expect(trace.statuses.opencode).toBe('passed')
+    expect(store.results.openwork).toEqual({ status: 'passed', version: '1.2.3' })
+    expect(trace.statuses.openwork).toBe('passed')
   })
 
   it('ignores an answer when no pause is pending', () => {

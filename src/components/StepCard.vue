@@ -106,6 +106,10 @@ const errorText = computed(() => {
   border-left-color: var(--border-subtle);
 }
 
+.step-card-warning {
+  border-left-color: var(--tertiary);
+}
+
 .step-card-failed {
   border-left-color: var(--primary);
 }
@@ -187,6 +191,10 @@ const errorText = computed(() => {
 
 .card-status-skipped {
   color: var(--fg-disabled);
+}
+
+.card-status-warning {
+  color: var(--tertiary);
 }
 
 .card-status-failed {

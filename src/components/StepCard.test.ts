@@ -22,7 +22,7 @@ const SHORT_TOKEN = 'k9z'
 
 const render = (
   detail: string,
-  id: 'opencode' | 'openwork' | 'rcpKey' = 'opencode',
+  id: 'openwork' | 'rcpKey' = 'openwork',
   paused = false,
 ): Promise<string> => {
   const app = createSSRApp({ render: () => h(StepCard, { id, detail, paused }) })
@@ -32,8 +32,8 @@ const render = (
       locale: 'en',
       messages: {
         en: {
-          stepTitles: { opencode: 'OpenCode', openwork: 'OpenWork', rcpKey: 'RCP key' },
-          trace: { status: { pending: 'Pending', running: 'Running' } },
+          stepTitles: { openwork: 'OpenWork', rcpKey: 'RCP key' },
+          trace: { status: { pending: 'Pending', running: 'Running', warning: 'Warning' } },
           progress: { waiting: 'Waiting for you' },
           run: { error: { generic: 'Something went wrong: {message}' } },
         },
@@ -60,10 +60,25 @@ describe('StepCard detail', () => {
   })
 })
 
+describe('StepCard warning mark', () => {
+  it('shows a warning card with its warning text and no failure', async () => {
+    trace.reset()
+    trace.setStepStatus('openwork', 'warning')
+
+    const markup = await render('no OpenWork engine was found')
+
+    expect(markup).toContain('step-card-warning')
+    expect(markup).toContain('Warning')
+    expect(markup).toContain('no OpenWork engine was found')
+    expect(markup).not.toContain('card-status-check')
+    expect(markup).not.toContain('step-card-failed')
+  })
+})
+
 describe('StepCard activity mark', () => {
   it('shows the spinner and aria-busy on the active card', async () => {
     trace.reset()
-    trace.setStepStatus('opencode', 'running')
+    trace.setStepStatus('openwork', 'running')
 
     const markup = await render('')
 
@@ -82,7 +97,7 @@ describe('StepCard activity mark', () => {
 
   it('keeps a passed card static', async () => {
     trace.reset()
-    trace.setStepStatus('opencode', 'passed')
+    trace.setStepStatus('openwork', 'passed')
 
     const markup = await render('')
 
@@ -134,7 +149,7 @@ const styleBlock = (css: string, selector: string): string => {
 describe('StepCard status palette', () => {
   it('marks a passed card with a check mark', async () => {
     trace.reset()
-    trace.setStepStatus('opencode', 'passed')
+    trace.setStepStatus('openwork', 'passed')
 
     expect(await render('')).toContain('card-status-check')
   })
@@ -155,12 +170,15 @@ describe('StepCard status palette', () => {
     expect(styleBlock(css, '.step-spin')).toContain('var(--epfl-red)')
   })
 
-  it('paints pass grey and fail red, with no other status colour', async () => {
+  it('paints pass grey and fail red, and accents a warning in the tertiary colour', async () => {
     const css = await source()
 
     expect(css).not.toMatch(/--(warning|success|info)/)
     expect(styleBlock(css, '.card-status-passed')).toContain('var(--fg-muted)')
     expect(styleBlock(css, '.card-status-failed')).toContain('var(--primary)')
+    expect(styleBlock(css, '.card-status-warning')).toContain('var(--tertiary)')
+    expect(styleBlock(css, '.card-status-warning')).not.toContain('var(--primary)')
+    expect(styleBlock(css, '.step-card-warning')).toContain('var(--tertiary)')
   })
 })
 

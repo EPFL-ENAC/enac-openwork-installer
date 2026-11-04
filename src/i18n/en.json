@@ -9,7 +9,7 @@
   },
   "welcome": {
     "title": "Welcome",
-    "intro": "This tool installs OpenCode and OpenWork on your computer.",
+    "intro": "This tool installs OpenWork on your computer.",
     "credentials": "You will be asked to enter your EPFL credentials to create or retrieve your LLM inference API key.",
     "start": "Start"
   },
@@ -87,7 +87,7 @@
     "missing": "OpenWork is not installed on this computer.",
     "stateBrokenTitle": "OpenWork cannot start",
     "stateBrokenDetail": "OpenWork stops with the message: Database is not empty and has no session table.",
-    "stateBrokenCause": "The cause is a database file that another OpenCode version created. OpenWork expects its own layout in that file, so it stops at start.",
+    "stateBrokenCause": "The cause is a database file that another engine version created. OpenWork expects its own layout in that file, so it stops at start.",
     "stateBrokenFix": "This setup can move the file to a backup and clear it. OpenWork then creates a new database on its next start. The backup keeps the old content, nothing is deleted.",
     "stateConsent": "I agree that this setup moves the database file to a backup.",
     "stateRepair": "Back up and clear",
@@ -100,6 +100,7 @@
     "notInstalled": "Not installed",
     "version": "Version {version}",
     "skipped": "Skipped (already installed)",
+    "smokeSkipped": "The engine check was skipped because no OpenWork engine was found. The installation is complete.",
     "configPaths": "Config file paths",
     "keyName": "RCP key name",
     "noKey": "No key created",
@@ -119,13 +120,13 @@
       "running": "Running",
       "passed": "Passed",
       "skipped": "Skipped",
+      "warning": "Warning",
       "failed": "Failed"
     }
   },
   "stepTitles": {
     "welcome": "Welcome",
     "network": "Network check",
-    "opencode": "OpenCode",
     "rcpKey": "RCP key",
     "openwork": "OpenWork",
     "summary": "Summary"

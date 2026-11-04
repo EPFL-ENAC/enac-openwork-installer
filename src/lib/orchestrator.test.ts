@@ -50,7 +50,7 @@ describe('orchestrator order', () => {
       },
     })
 
-    const flow = createOrchestrator([step('welcome'), step('network'), step('opencode')], sink)
+    const flow = createOrchestrator([step('welcome'), step('network'), step('summary')], sink)
     await flow.start()
 
     expect(trace).toEqual([
@@ -58,10 +58,10 @@ describe('orchestrator order', () => {
       'welcome:end',
       'network:start',
       'network:end',
-      'opencode:start',
-      'opencode:end',
+      'summary:start',
+      'summary:end',
     ])
-    expect(statuses).toEqual({ welcome: 'passed', network: 'passed', opencode: 'passed' })
+    expect(statuses).toEqual({ welcome: 'passed', network: 'passed', summary: 'passed' })
     expect(flow.state).toBe('done')
   })
 
@@ -138,7 +138,7 @@ describe('orchestrator failure', () => {
     const flow = createOrchestrator(
       [
         { id: 'welcome', run: async () => passed() },
-        { id: 'opencode', run: async () => failed() },
+        { id: 'summary', run: async () => failed() },
         {
           id: 'rcpKey',
           run: async () => {
@@ -154,8 +154,8 @@ describe('orchestrator failure', () => {
 
     expect(trace).toEqual([])
     expect(flow.state).toBe('failed')
-    expect(flow.failedStep).toBe('opencode')
-    expect(statuses).toEqual({ welcome: 'passed', opencode: 'failed', rcpKey: 'pending' })
+    expect(flow.failedStep).toBe('summary')
+    expect(statuses).toEqual({ welcome: 'passed', summary: 'failed', rcpKey: 'pending' })
   })
 })
 
@@ -178,9 +178,9 @@ describe('orchestrator retry', () => {
           },
         },
         {
-          id: 'opencode',
+          id: 'summary',
           run: async () => {
-            const attempt = bump('opencode')
+            const attempt = bump('summary')
             return attempt === 1 ? failed() : passed({ version: '1.2.3' })
           },
         },
@@ -205,20 +205,20 @@ describe('orchestrator retry', () => {
 
     await flow.start()
     expect(flow.state).toBe('failed')
-    expect(flow.failedStep).toBe('opencode')
+    expect(flow.failedStep).toBe('summary')
 
     await flow.retry()
 
-    expect(calls).toEqual({ welcome: 1, opencode: 2, rcpKey: 1, openwork: 1 })
+    expect(calls).toEqual({ welcome: 1, summary: 2, rcpKey: 1, openwork: 1 })
     expect(flow.state).toBe('done')
     expect(flow.failedStep).toBeNull()
     expect(flow.results).toEqual({
       welcome: { status: 'passed', detail: 'ok' },
-      opencode: { status: 'passed', version: '1.2.3' },
+      summary: { status: 'passed', version: '1.2.3' },
       rcpKey: { status: 'skipped' },
       openwork: { status: 'passed', ok: true },
     })
-    expect(onComplete).toEqual(['welcome', 'opencode', 'rcpKey', 'openwork'])
+    expect(onComplete).toEqual(['welcome', 'summary', 'rcpKey', 'openwork'])
   })
 
   it('clears the failure surface while the failed step reruns', async () => {

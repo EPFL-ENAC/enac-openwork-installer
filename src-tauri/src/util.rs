@@ -106,25 +106,6 @@ pub async fn fetch_text(client: &reqwest::Client, url: &str) -> Result<String, A
         .map_err(|e| AppError::network(format!("GET {url} failed to read the body: {e}")))
 }
 
-pub async fn download_bytes(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, AppError> {
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| AppError::network(format!("GET {url} failed: {e}")))?;
-    if !response.status().is_success() {
-        return Err(AppError::network(format!(
-            "GET {url} returned HTTP {}",
-            response.status()
-        )));
-    }
-    response
-        .bytes()
-        .await
-        .map(|bytes| bytes.to_vec())
-        .map_err(|e| AppError::network(format!("GET {url} failed to read the body: {e}")))
-}
-
 pub async fn download_to(
     client: &reqwest::Client,
     url: &str,
@@ -184,12 +165,29 @@ pub async fn run(
     args: &[&str],
     timeout: Duration,
 ) -> Result<CommandOutput, AppError> {
+    run_in(program, args, timeout, &[], None).await
+}
+
+/// Runs one program with extra environment pairs and an optional working
+/// directory, for a sidecar that needs its key in the environment and an
+/// unpacked AppImage that must extract into a directory of our own.
+pub async fn run_in(
+    program: &Path,
+    args: &[&str],
+    timeout: Duration,
+    envs: &[(&str, String)],
+    cwd: Option<PathBuf>,
+) -> Result<CommandOutput, AppError> {
     let program = program.to_path_buf();
     let owned: Vec<String> = args.iter().map(|arg| arg.to_string()).collect();
+    let owned_envs: Vec<(String, String)> = envs
+        .iter()
+        .map(|(key, value)| (key.to_string(), value.clone()))
+        .collect();
     let display = program.display().to_string();
     tauri::async_runtime::spawn_blocking(move || {
         let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
-        run_with_timeout(&program, &refs, timeout)
+        run_with_timeout(&program, &refs, timeout, &owned_envs, cwd)
     })
     .await
     .map_err(|e| AppError::io(format!("cannot run {display}: {e}")))?
@@ -228,6 +226,8 @@ pub fn run_with_timeout(
     program: &Path,
     args: &[&str],
     timeout: Duration,
+    envs: &[(String, String)],
+    cwd: Option<PathBuf>,
 ) -> Result<CommandOutput, AppError> {
     let dir = temp_dir("run")?;
     let out_path = dir.join("stdout");
@@ -237,11 +237,19 @@ pub fn run_with_timeout(
     let err = std::fs::File::create(&err_path)
         .map_err(|e| AppError::io(format!("cannot create {}: {e}", err_path.display())))?;
 
-    let mut child = Command::new(program)
+    let mut command = Command::new(program);
+    command
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::from(out))
-        .stderr(Stdio::from(err))
+        .stderr(Stdio::from(err));
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    let mut child = command
         .spawn()
         .map_err(|e| AppError::io(format!("cannot run {}: {e}", program.display())))?;
 

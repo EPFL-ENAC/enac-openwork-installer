@@ -1,7 +1,7 @@
 import { reactive } from 'vue'
 import { STEP_ORDER, type StepId } from './flow'
 
-export type TraceStepStatus = 'pending' | 'running' | 'passed' | 'skipped' | 'failed'
+export type TraceStepStatus = 'pending' | 'running' | 'passed' | 'skipped' | 'warning' | 'failed'
 
 export type TraceScope = StepId | 'flow'
 

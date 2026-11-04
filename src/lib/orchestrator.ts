@@ -1,7 +1,7 @@
 import type { FlowResults, StepDonePayload, StepId } from './flow'
 import type { AppError } from './ipc'
 
-export type TraceStepStatus = 'pending' | 'running' | 'passed' | 'skipped' | 'failed'
+export type TraceStepStatus = 'pending' | 'running' | 'passed' | 'skipped' | 'warning' | 'failed'
 export type TraceScope = StepId | 'flow'
 
 export interface TraceSink {
@@ -10,7 +10,7 @@ export interface TraceSink {
 }
 
 export type StepOutcome =
-  | { status: 'passed' | 'skipped'; result?: StepDonePayload }
+  | { status: 'passed' | 'skipped' | 'warning'; result?: StepDonePayload }
   | { status: 'failed'; error: AppError }
 
 export interface StepRun {
