@@ -1038,7 +1038,8 @@ __restore_tty() {
 
 ask_yn() {
     local reply=""
-    read -r -p "$1 [Y/n]: " reply || return 1
+    printf '%s [Y/n]:\n' "$1" >&2
+    read -r reply || return 1
     [[ -z $reply || $reply == [Yy]* ]]
 }
 
@@ -1179,6 +1180,7 @@ create_key_flow() {
             name=$(ask_default_value "key name" "$suggestion")
             continue
         fi
+        say "creating key $name on the portal"
         resp=$(curl -sS --max-time "$HTTP_TIMEOUT" -o "$CONFDIR/.create.html" -w '%{http_code} %{url_effective}' -X POST "$form_url" \
             -H "Cookie: $SESSION_HEADER" -H "Referer: $form_url" -H "HX-Request: true" \
             -H "Content-Type: application/x-www-form-urlencoded" -H "User-Agent: $PORTAL_UA" \
@@ -1224,7 +1226,8 @@ pick_numbered_list() {
     done
     local reply choice=""
     while :; do
-        read -r -p "select $what [$default]: " reply || die "aborted"
+        printf 'select %s [%s]:\n' "$what" "$default" >&2
+        read -r reply || die "aborted"
         reply=${reply:-$default}
         if [[ $reply =~ ^[0-9]+$ ]] && ((reply >= 1 && reply <= n)); then
             break
@@ -1237,7 +1240,8 @@ pick_numbered_list() {
 
 ask_default_value() {
     local what=$1 default=$2 reply=""
-    read -r -p "$what [$default]: " reply || die "aborted"
+    printf '%s [%s]:\n' "$what" "$default" >&2
+    read -r reply || die "aborted"
     reply=${reply#"${reply%%[![:space:]]*}"}
     reply=${reply%"${reply##*[![:space:]]}"}
     printf '%s\n' "${reply:-$default}"
@@ -1268,7 +1272,8 @@ rcp_key_step() {
         printf '%s\n' "$tsv" | awk -F'\t' '{ p = (tolower($3) == "premium") ? "premium" : "basic"; print "  " NR ") " $2 " (" p ")" }'
         say "  n) create a new key"
         local reply
-        read -r -p "select a key or n [new]: " reply || die "aborted"
+        printf 'select a key or n [new]:\n' >&2
+        read -r reply || die "aborted"
         if [[ $reply == [Nn]* ]]; then
             create_key_flow "$keys_json"
             reveal_secret "$REVEAL_KEY_ID"
@@ -1373,6 +1378,8 @@ main() {
     mkdir -p "$CONFDIR"
     LOG_FILE="$CONFDIR/install.log"
     # GNU sed takes -u, BSD sed takes -l, to keep the masking filter line-buffered.
+    # The filter is line oriented, so every prompt must end its line or the user
+    # sees nothing until the next newline lands.
     sed_flags=(-E)
     [[ $OS == "macos" ]] && sed_flags=(-l "${sed_flags[@]}")
     [[ $OS == "linux" ]] && sed_flags=(-u "${sed_flags[@]}")

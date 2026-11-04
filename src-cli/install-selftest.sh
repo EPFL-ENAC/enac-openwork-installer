@@ -654,4 +654,19 @@ printf '#!/bin/sh\nexit 3\n' > "$ENGINE"
 chmod 755 "$ENGINE"
 assert_fail "failing engine is a failure" smoke_test
 
+# 29. prompts end their line: the masking filter is line oriented, so a
+# newline-less prompt stays in the sed buffer and the terminal shows nothing
+# until the next line lands (the #66 create-key stall).
+assert_eq "no inline read prompt left" "$(grep -c 'read -r -p' src-cli/install.sh || true)" "0"
+
+# 30. the create-key flow announces the POST and the read-back around them
+openwork_selftest_reset
+SESSION_HEADER="sessionid=STUBSESS"
+SESSION_CSRF="cookieCSRF"
+out=$(create_key_flow "$(cat "$ST_KEYS_FILE")" <<< $'1\nOpenWork\n')
+assert_match "create flow announces the POST" "$out" 'creating key OpenWork on the portal'
+assert_eq "POST line comes before the result line" \
+    "$(printf '%s\n' "$out" | awk '/creating key OpenWork on the portal/ { print "announce" } /key OpenWork created on the portal/ { print "created" }' | paste -sd'|')" \
+    'announce|created'
+
 printf 'selftest: %s checks passed\n' "$ASSERTS"
