@@ -531,4 +531,127 @@ rcp_key_step < /dev/null
 ST_KEYS_FILE=$SMALL_KEYS_FILE
 assert_eq "big key list reused the OpenWork key" "$API_TOKEN" "sk-aaaa1111bbbb2222cccc3333"
 
+# 25. the standalone OpenCode install is gone, the flow is five steps, the
+# config writer and the state repair stay
+# The pattern escapes the separator so a plain grep for the removed names
+# stays clean in this file too.
+assert_eq "no standalone install source left" "$(grep -E -c 'OPENCODE_(INSTALL|RELEASE)|opencode\.ai/(v2/install|update)' src-cli/install.sh || true)" "0"
+assert_eq "no standalone install helpers left" "$(grep -c 'install_opencode\|find_opencode\|oc_arch_name' src-cli/install.sh || true)" "0"
+assert_eq "five step labels" "$(grep -o '\[[0-9]/[0-9]\]' src-cli/install.sh | sort -u | paste -sd' ')" "[1/5] [2/5] [3/5] [4/5] [5/5]"
+assert_eq "config writer stays" "$(type -t write_opencode_config)" "function"
+assert_eq "config schema stays" "$OC_CONFIG_SCHEMA" "https://opencode.ai/config.json"
+assert_eq "state repair stays" "$(type -t repair_opencode_state)" "function"
+openwork_selftest_reset
+# shellcheck disable=SC2034
+OS="linux"
+# shellcheck disable=SC2034
+ARCH="x86_64"
+OPENWORK_FRESH_INSTALL=1
+out=$(install_openwork 2>&1)
+assert_eq "OpenWork step is two of five" "$(printf '%s\n' "$out" | grep -m1 '==>')" "==> [2/5] Installing OpenWork"
+
+# 26. engine identity: fresh install picks v2, a present install keeps v1
+openwork_selftest_reset
+assert_eq "fresh install picks v2" "$(openwork_engine_name)" "opencode2"
+OPENWORK_FRESH_INSTALL=0
+assert_eq "present install picks v1" "$(openwork_engine_name)" "opencode"
+: > "$CONFDIR/engine-v2-preview.json"
+assert_eq "marker picks v2" "$(openwork_engine_name)" "opencode2"
+rm -f "$CONFDIR/engine-v2-preview.json"
+assert_eq "env picks v2" "$(OPENWORK_ENGINE_V2_PREVIEW=1 openwork_engine_name)" "opencode2"
+assert_eq "blank env keeps v1" "$(OPENWORK_ENGINE_V2_PREVIEW='  ' openwork_engine_name)" "opencode"
+assert_eq "target triple for linux x64" "$(engine_triple)" "x86_64-unknown-linux-gnu"
+assert_eq "target triple for macos arm64" "$(OS=macos ARCH=aarch64 engine_triple)" "aarch64-apple-darwin"
+
+# 27. locator: the installed sidecars dir, plain name first, then suffixed
+openwork_selftest_reset
+rm -rf "$ST_HOME/.local/share/openwork"
+SIDE="$ST_HOME/.local/share/openwork/resources/sidecars"
+mkdir -p "$SIDE"
+printf '#!/bin/sh\n' > "$SIDE/opencode"
+printf '#!/bin/sh\n' > "$SIDE/opencode-x86_64-unknown-linux-gnu"
+assert_eq "plain engine name wins" "$(locate_openwork_engine)" "$SIDE/opencode"
+rm -f "$SIDE/opencode"
+assert_eq "triple suffix is the fallback" "$(locate_openwork_engine)" "$SIDE/opencode-x86_64-unknown-linux-gnu"
+assert_eq "fresh install wants the v2 name" "$(OPENWORK_FRESH_INSTALL=1 locate_openwork_engine || true)" ""
+
+# 27b. no engine anywhere: the locator fails, it never guesses
+openwork_selftest_reset
+rm -rf "$ST_HOME/.local/share/openwork" "$ST_HOME/.local/share/applications"
+assert_fail "engine absent on linux" locate_openwork_engine
+
+# 27c. the AppImage is extracted FUSE-free and the temp dir is recorded
+openwork_selftest_reset
+APPDIR="$ST_HOME/.local/share/openwork"
+rm -rf "$APPDIR"
+mkdir -p "$APPDIR"
+AP="$APPDIR/OpenWork.AppImage"
+cat > "$AP" <<'EOF'
+#!/bin/sh
+[ "$1" = "--appimage-extract" ] || exit 1
+mkdir -p squashfs-root/resources/sidecars
+printf '#!/bin/sh\n' > squashfs-root/resources/sidecars/opencode2
+EOF
+chmod 755 "$AP"
+out=$(OPENWORK_FRESH_INSTALL=1 locate_openwork_engine)
+assert_match "sidecar taken out of the appimage" "$out" '/squashfs-root/resources/sidecars/opencode2$'
+assert_eq "extraction dir recorded for cleanup" "$([[ -d ${ENGINE_EXTRACT_DIR:-/nonexistent} ]] && printf yes || printf no)" "yes"
+assert_match "extracted engine is under the temp dir" "$out" "^$ENGINE_EXTRACT_DIR/"
+rm -rf "$ENGINE_EXTRACT_DIR"
+# an appimage that extracts nothing is a locator miss, not a crash
+printf '#!/bin/sh\nexit 1\n' > "$AP"
+chmod 755 "$AP"
+assert_fail "empty appimage extraction" locate_openwork_engine
+
+# 27d. macOS reads the app bundle sidecars, with an overridable app path
+openwork_selftest_reset
+MACAPP="$ST_WORK/Applications/OpenWork.app"
+mkdir -p "$MACAPP/Contents/Resources/sidecars"
+printf '#!/bin/sh\n' > "$MACAPP/Contents/Resources/sidecars/opencode2"
+assert_eq "macOS bundle sidecar found" "$(OS=macos ARCH=aarch64 OPENWORK_APP_DIR="$MACAPP" OPENWORK_FRESH_INSTALL=1 locate_openwork_engine)" "$MACAPP/Contents/Resources/sidecars/opencode2"
+
+# 28. smoke: a missing engine skips with a warning and exits clean
+openwork_selftest_reset
+rm -rf "$ST_HOME/.local/share/openwork"
+OPENWORK_FRESH_INSTALL=0
+if err=$(smoke_test 2>&1 > /dev/null); then SMOKE_RC=0; else SMOKE_RC=$?; fi
+assert_eq "missing engine is not a failure" "$SMOKE_RC" "0"
+assert_match "skip warning" "$err" 'smoke test skipped: OpenWork-managed engine not found'
+assert_match "skip says why" "$err" 'not found'
+
+# 28b. smoke: the located engine runs with the standalone args and the key
+ENGINE="$ST_HOME/.local/share/openwork/resources/sidecars/opencode"
+mkdir -p "$(dirname "$ENGINE")"
+cat > "$ENGINE" <<EOF
+#!/bin/sh
+printf '%s\n' "\$*" > "$ST_WORK/engine-args"
+printf '%s\n' "\${EPFL_AIAAS_API_KEY:-none}" > "$ST_WORK/engine-env"
+printf 'OK\n'
+EOF
+chmod 755 "$ENGINE"
+API_TOKEN="sk-smoke"
+out=$(smoke_test 2>&1)
+assert_eq "engine invoked with the standalone args" "$(cat "$ST_WORK/engine-args")" 'run --standalone --model epfl-rcp-aiaas/epfl-aiaas/small Reply with the single word OK.'
+assert_eq "engine gets the API key in the environment" "$(cat "$ST_WORK/engine-env")" "sk-smoke"
+assert_match "smoke reports the reached answer" "$out" 'answered: OK'
+
+# 28c. smoke: a fresh install runs the v2 sidecar, not the v1 one
+SIDEDIR="$ST_HOME/.local/share/openwork/resources/sidecars"
+cp "$ENGINE" "$SIDEDIR/opencode2"
+chmod 755 "$SIDEDIR/opencode2"
+printf '#!/bin/sh\necho v1-ran > "%s"\n' "$ST_WORK/v1-ran" > "$SIDEDIR/opencode"
+chmod 755 "$SIDEDIR/opencode"
+rm -f "$ST_WORK/v1-ran" "$ST_WORK/engine-args"
+OPENWORK_FRESH_INSTALL=1
+SMOKE_V2=$(smoke_test 2>&1)
+assert_eq "v2 sidecar ran on a fresh install" "$(cat "$ST_WORK/engine-args" 2> /dev/null || true)" 'run --standalone --model epfl-rcp-aiaas/epfl-aiaas/small Reply with the single word OK.'
+assert_eq "v1 sidecar never ran" "$([[ -f $ST_WORK/v1-ran ]] && printf yes || printf no)" "no"
+assert_match "v2 answer reported" "$SMOKE_V2" 'answered: OK'
+
+# 28d. smoke: a failing engine stays a hard failure
+OPENWORK_FRESH_INSTALL=0
+printf '#!/bin/sh\nexit 3\n' > "$ENGINE"
+chmod 755 "$ENGINE"
+assert_fail "failing engine is a failure" smoke_test
+
 printf 'selftest: %s checks passed\n' "$ASSERTS"

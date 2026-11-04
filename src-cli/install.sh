@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # EPFL OpenWork terminal installer for Linux and macOS.
-# Same flow as the GUI installer: prerequisites, OpenCode, OpenWork, EPFL portal
+# Same flow as the GUI installer: prerequisites, OpenWork, EPFL portal
 # sign-in, RCP API key, provider configuration, smoke test.
 # https://github.com/EPFL-ENAC/enac-openwork-installer
 set -euo pipefail
@@ -10,8 +10,15 @@ umask 077
 INSTALL_URL="https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/install.sh"
 
 OPENWORK_RELEASE_API="https://api.github.com/repos/different-ai/openwork/releases/latest"
-OPENCODE_INSTALL_URL="https://opencode.ai/v2/install"
-OPENCODE_RELEASE_BASE="https://opencode.ai/update/api/latest/cli/opencode"
+# Tests override it: /Applications is read only on a build host.
+OPENWORK_APP_DIR="${OPENWORK_APP_DIR:-/Applications/OpenWork.app}"
+# OpenWork bundles the engine it runs as a sidecar (opencode, opencode2).
+ENGINE_V1="opencode"
+ENGINE_V2="opencode2"
+# A fixed path, not a subshell global: the caller captures the engine path with
+# $(...), so only a value computed here survives cleanup().
+ENGINE_EXTRACT_DIR="${TMPDIR:-/tmp}/openwork-engine.$$"
+OPENWORK_FRESH_INSTALL=0
 
 PORTAL_BASE="https://portal.rcp.epfl.ch"
 PORTAL_KEYS_PAGE="$PORTAL_BASE/aiaas/keys"
@@ -20,7 +27,6 @@ PORTAL_NEW_KEY_MODAL="$PORTAL_BASE/aiaas/modal_key_new"
 PORTAL_SHOW_SECRET="$PORTAL_BASE/aiaas/showsecret"
 PORTAL_UA="epfl-openwork-installer-cli"
 
-SCRIPT_TIMEOUT=600
 INSTALL_TIMEOUT=900
 SHORT_TIMEOUT=120
 LOGIN_TIMEOUT_SECS=600
@@ -645,83 +651,84 @@ check_network() {
     fi
 }
 
-find_opencode() {
-    if command -v opencode > /dev/null 2>&1; then
-        command -v opencode
+engine_triple() {
+    case "$OS:$ARCH" in
+        "macos:aarch64") printf 'aarch64-apple-darwin' ;;
+        "macos:x86_64") printf 'x86_64-apple-darwin' ;;
+        "linux:x86_64") printf 'x86_64-unknown-linux-gnu' ;;
+        "linux:aarch64") printf 'aarch64-unknown-linux-gnu' ;;
+        *) return 1 ;;
+    esac
+}
+
+# Bundled sidecars ship a plain name and a target-triple suffixed copy.
+engine_binary_in() {
+    local dir=$1 name=$2 triple c
+    [[ -d $dir ]] || return 1
+    triple=$(engine_triple) || return 1
+    for c in "$dir/$name" "$dir/$name-$triple"; do
+        if [[ -f $c ]]; then
+            printf '%s\n' "$c"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Mirrors resolveFreshInstallEngine: this script's own fresh install runs v2, an
+# already present install keeps v1 unless the preview marker or env asks for v2.
+openwork_engine_name() {
+    local preview=${OPENWORK_ENGINE_V2_PREVIEW:-}
+    preview=${preview//[[:space:]]/}
+    if [[ $OPENWORK_FRESH_INSTALL == "1" || -n $preview || -f "$CONFDIR/engine-v2-preview.json" ]]; then
+        printf '%s\n' "$ENGINE_V2"
         return 0
     fi
-    if [[ -x "$HOME/.opencode/bin/opencode" ]]; then
-        printf '%s\n' "$HOME/.opencode/bin/opencode"
+    printf '%s\n' "$ENGINE_V1"
+}
+
+openwork_appimage() {
+    local dest="$HOME/.local/share/openwork/OpenWork.AppImage" exec_line
+    if [[ -x $dest ]]; then
+        printf '%s\n' "$dest"
+        return 0
+    fi
+    exec_line=$(sed -n 's/^Exec="\([^"]*\)".*/\1/p' "$HOME/.local/share/applications/openwork.desktop" 2> /dev/null | head -1 || true)
+    if [[ $exec_line == *.AppImage && -x $exec_line ]]; then
+        printf '%s\n' "$exec_line"
         return 0
     fi
     return 1
 }
 
-oc_arch_name() {
-    case "$OS:$ARCH" in
-        "macos:arm64") printf 'darwin-arm64' ;;
-        "macos:x86_64") printf 'darwin-x64' ;;
-        "linux:x86_64") printf 'linux-x64' ;;
-        "linux:aarch64") printf 'linux-arm64' ;;
-        *) return 1 ;;
-    esac
-}
-
-install_opencode() {
-    step "[2/6] Installing OpenCode"
-    local bin
-    if bin=$(find_opencode); then
-        sub "OpenCode is already installed at $bin, skipping"
+locate_openwork_engine() {
+    local name installed appimage
+    name=$(openwork_engine_name)
+    if [[ $OS == "macos" ]]; then
+        engine_binary_in "$OPENWORK_APP_DIR/Contents/Resources/sidecars" "$name"
+        return $?
+    fi
+    installed="$HOME/.local/share/openwork/resources/sidecars"
+    if engine_binary_in "$installed" "$name"; then
         return 0
     fi
-    local tmp
-    tmp=$(mktemp -d)
-    say "fetching the OpenCode install script from opencode.ai"
-    if curl -fsSL --max-time "$SCRIPT_TIMEOUT" -o "$tmp/install.sh" "$OPENCODE_INSTALL_URL" \
-        && run_with_timeout "$SCRIPT_TIMEOUT" bash "$tmp/install.sh"; then
-        rm -rf "$tmp"
-    else
-        warn "the OpenCode install script failed, trying the release archive fallback"
-        rm -rf "$tmp"
-        install_opencode_fallback
-    fi
-    if ! bin=$(find_opencode); then
-        die "OpenCode was not installed, see the output above"
-    fi
-    if [[ ":$PATH:" != *":$HOME/.opencode/bin:"* ]]; then
-        sub "note: $HOME/.opencode/bin is not on PATH in this session, start OpenCode with the full path or open a new terminal"
-    fi
-    sub "OpenCode $(run_with_timeout 60 "$bin" --version 2> /dev/null | head -1 || echo installed)"
+    appimage=$(openwork_appimage) || return 1
+    extract_appimage_engine "$appimage" "$name"
 }
 
-install_opencode_fallback() {
-    local arch tmp dest src
-    arch=$(oc_arch_name) || die "unsupported platform for the OpenCode fallback"
-    tmp=$(mktemp -d)
-    mkdir -p "$HOME/.opencode/bin"
-    dest="$HOME/.opencode/bin/opencode"
-    if [[ $OS == "macos" ]]; then
-        command -v unzip > /dev/null 2>&1 || die "unzip is required for the OpenCode fallback install"
-        local flavor="" url
-        url="$OPENCODE_RELEASE_BASE/opencode-$arch.zip"
-        curl -fsSL --max-time "$INSTALL_TIMEOUT" -o "$tmp/oc.zip" "$url" || die "could not download $url"
-        unzip -q -o "$tmp/oc.zip" -d "$tmp/x"
-        src=$(find "$tmp/x" -type f -name opencode | head -1)
-    else
-        local flavor="" url
-        if [[ -f /etc/alpine-release ]] || ldd --version 2>&1 | grep -qi musl; then
-            flavor="-musl"
-        fi
-        url="$OPENCODE_RELEASE_BASE/opencode-$arch$flavor.tar.gz"
-        curl -fsSL --max-time "$INSTALL_TIMEOUT" -o "$tmp/oc.tar.gz" "$url" || die "could not download $url"
-        tar -xzf "$tmp/oc.tar.gz" -C "$tmp/x" 2> /dev/null || { mkdir -p "$tmp/x"; tar -xzf "$tmp/oc.tar.gz" -C "$tmp/x"; }
-        src=$(find "$tmp/x" -type f -name opencode | head -1)
+# FUSE-free read of the bundled sidecars out of the AppImage. The temp dir stays
+# until cleanup() so the caller can run the engine it points at.
+extract_appimage_engine() {
+    local appimage=$1 name=$2 sidecars
+    sidecars="$ENGINE_EXTRACT_DIR/squashfs-root/resources/sidecars"
+    rm -rf "$ENGINE_EXTRACT_DIR"
+    mkdir -p "$ENGINE_EXTRACT_DIR" || return 1
+    if ! (cd "$ENGINE_EXTRACT_DIR" && run_with_timeout "$INSTALL_TIMEOUT" "$appimage" --appimage-extract '*sidecars*' > /dev/null 2>&1) \
+        || ! engine_binary_in "$sidecars" "$name"; then
+        rm -rf "$ENGINE_EXTRACT_DIR"
+        return 1
     fi
-    [[ -n $src ]] || die "the OpenCode archive holds no opencode binary"
-    [[ -e $dest ]] && die "$dest already exists, it was not overwritten"
-    cp "$src" "$dest"
-    chmod 755 "$dest"
-    rm -rf "$tmp"
+    engine_binary_in "$sidecars" "$name"
 }
 
 repair_opencode_state() {
@@ -821,18 +828,10 @@ EOF
 }
 
 install_openwork_linux() {
-    local dest_dir="$HOME/.local/share/openwork" dest="$HOME/.local/share/openwork/OpenWork.AppImage"
-    if [[ -f $dest ]]; then
-        sub "OpenWork is already installed at $dest, skipping"
+    local dest_dir="$HOME/.local/share/openwork" dest="$HOME/.local/share/openwork/OpenWork.AppImage" existing
+    if existing=$(openwork_appimage); then
+        sub "OpenWork is already installed at $existing, skipping"
         return 0
-    fi
-    local desktop="$HOME/.local/share/applications/openwork.desktop" exec_line
-    if [[ -f $desktop ]]; then
-        exec_line=$(sed -n 's/^Exec="\([^"]*\)".*/\1/p' "$desktop" | head -1)
-        if [[ $exec_line == *.AppImage && -f $exec_line ]]; then
-            sub "OpenWork is already installed at $exec_line, skipping"
-            return 0
-        fi
     fi
     local tmp release version
     tmp=$(mktemp -d)
@@ -865,7 +864,7 @@ install_openwork_linux() {
 }
 
 install_openwork_macos() {
-    local dest="/Applications/OpenWork.app"
+    local dest="$OPENWORK_APP_DIR"
     if [[ -d $dest ]]; then
         sub "OpenWork is already installed at $dest, skipping"
         return 0
@@ -892,11 +891,14 @@ install_openwork_macos() {
 }
 
 install_openwork() {
-    step "[3/6] Installing OpenWork"
+    step "[2/5] Installing OpenWork"
     repair_opencode_state
+    # A fresh install runs the v2 sidecar, a present one keeps v1.
     if [[ $OS == "macos" ]]; then
+        [[ -d $OPENWORK_APP_DIR ]] && OPENWORK_FRESH_INSTALL=0 || OPENWORK_FRESH_INSTALL=1
         install_openwork_macos
     else
+        openwork_appimage > /dev/null && OPENWORK_FRESH_INSTALL=0 || OPENWORK_FRESH_INSTALL=1
         install_openwork_linux
     fi
 }
@@ -938,7 +940,7 @@ extract_pasted_session() {
 }
 
 portal_login() {
-    step "[4/6] Signing in to the EPFL portal"
+    step "[3/5] Signing in to the EPFL portal"
     if try_saved_session; then
         return 0
     fi
@@ -1242,7 +1244,7 @@ ask_default_value() {
 }
 
 rcp_key_step() {
-    step "[5/6] Selecting an RCP AIaaS key"
+    step "[4/5] Selecting an RCP AIaaS key"
     if [[ -n $MANUAL_TOKEN ]]; then
         sub "using the key secret pasted during sign-in"
         API_TOKEN=$MANUAL_TOKEN
@@ -1298,7 +1300,7 @@ fresh_csrf_from_headers() {
 }
 
 write_provider_config() {
-    step "[6/6] Writing the provider configuration"
+    step "[5/5] Writing the provider configuration"
     write_opencode_config "$API_TOKEN"
     write_env_store "$API_TOKEN"
     write_runtime_rows
@@ -1308,14 +1310,15 @@ write_provider_config() {
 
 smoke_test() {
     local bin out errf rc
-    if ! bin=$(find_opencode); then
-        warn "OpenCode is not installed, run the OpenCode step first"
-        return 1
+    if ! bin=$(locate_openwork_engine); then
+        warn "smoke test skipped: OpenWork-managed engine not found"
+        return 0
     fi
     say "running the smoke test: $OC_MODEL_PROVIDER answers one prompt"
+    sub "engine: $bin"
     errf=$(mktemp)
     set +e
-    out=$(run_with_timeout "$SMOKE_TIMEOUT" "$bin" run --standalone --model "$OC_MODEL_PROVIDER" "$SMOKE_PROMPT" < /dev/null 2> "$errf")
+    out=$(EPFL_AIAAS_API_KEY="$API_TOKEN" run_with_timeout "$SMOKE_TIMEOUT" "$bin" run --standalone --model "$OC_MODEL_PROVIDER" "$SMOKE_PROMPT" < /dev/null 2> "$errf")
     rc=$?
     set -e
     if [[ $rc -eq 0 && -n ${out//[[:space:]]/} ]]; then
@@ -1338,7 +1341,7 @@ print_summary() {
     [[ $OS != "macos" ]] && launch="$HOME/.local/share/openwork/OpenWork.AppImage"
     say ""
     say "==> Summary"
-    sub "OpenCode and OpenWork are installed and configured"
+    sub "OpenWork is installed and configured"
     sub "provider: RCP AI Inference as a Service ($PROVIDER_ID)"
     sub "default model: $OPENWORK_MODEL_LARGE (RCP AIaaS Large)"
     sub "configs: ~/.config/opencode/opencode.json and $CONFDIR"
@@ -1379,10 +1382,9 @@ main() {
     trap 'exit 130' INT
 
     say "EPFL OpenWork terminal installer ($(date -u '+%Y-%m-%dT%H:%M:%SZ'))"
-    step "[1/6] Checking prerequisites and network"
+    step "[1/5] Checking prerequisites and network"
     check_prereqs
     check_network
-    install_opencode
     install_openwork
     portal_login
     rcp_key_step
@@ -1396,6 +1398,7 @@ main() {
 }
 
 cleanup() {
+    [[ -n ${ENGINE_EXTRACT_DIR:-} ]] && rm -rf "$ENGINE_EXTRACT_DIR"
     __restore_tty
     exec 1>&- 2>&- || true
     sleep 0.2

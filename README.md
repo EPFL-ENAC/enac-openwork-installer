@@ -5,7 +5,6 @@ Desktop installer for OpenWork, with configuration to use EPFL RCP's AI as a Ser
 It does the following:
 
 - Create an API key for LLM inference on EPFL RCP AIaaS (must be on EPFL network or VPN)
-- Install OpenCode
 - Install OpenWork
 - Configure OpenWork to use EPFL RCP AIaaS models ("Large" and "Small")
 
