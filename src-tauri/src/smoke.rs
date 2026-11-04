@@ -116,8 +116,11 @@ async fn extract_sidecars(appimage: &Path) -> Option<(PathBuf, PathBuf)> {
 
 /// Finds the engine binary and, for an AppImage, the temp directory that holds it.
 async fn locate(install: &Path, engine: Engine) -> Option<(PathBuf, Option<PathBuf>)> {
+    if let Some(path) = pick(&sidecar_dir(install), engine) {
+        return Some((path, None));
+    }
     if !is_appimage(install) {
-        return pick(&sidecar_dir(install), engine).map(|path| (path, None));
+        return None;
     }
     let (dir, sidecars) = extract_sidecars(install).await?;
     match pick(&sidecars, engine) {
@@ -387,6 +390,22 @@ mod tests {
         assert_eq!(pick(&dir, Engine::V2), Some(dir.join("opencode2")));
         assert_eq!(pick(&dir, Engine::V1), None);
 
+        util::remove_dir(&dir);
+    }
+
+    // The CLI checks the installed sidecars dir before it unpacks the AppImage.
+    #[test]
+    fn locate_reads_the_installed_sidecars_before_it_unpacks_the_appimage() {
+        let dir = util::temp_dir("locate-order").expect("a temp dir");
+        let install = dir.join("OpenWork.AppImage");
+        std::fs::write(&install, "not a real appimage").expect("a fixture appimage");
+        let sidecars = dir.join("resources").join("sidecars");
+        std::fs::create_dir_all(&sidecars).expect("a fixture sidecars dir");
+        std::fs::write(sidecars.join("opencode2"), "x").expect("a fixture sidecar");
+
+        let found = tauri::async_runtime::block_on(locate(&install, Engine::V2));
+
+        assert_eq!(found, Some((sidecars.join("opencode2"), None)));
         util::remove_dir(&dir);
     }
 
