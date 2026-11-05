@@ -1,12 +1,12 @@
 [package]
-name = "epfl-openwork-installer"
+name = "openwork-installer"
 version = "0.1.0"
 description = "OpenWork Installer"
 edition = "2021"
 rust-version = "1.90"
 
 [lib]
-name = "epfl_openwork_installer_lib"
+name = "openwork_installer_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
