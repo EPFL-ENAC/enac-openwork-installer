@@ -68,7 +68,7 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: "1"
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "EPFL OpenWork Installer ${{ github.ref_name }}"
+          releaseName: "OpenWork Installer ${{ github.ref_name }}"
           releaseBody: "Unsigned build. See the README for install workarounds."
           releaseDraft: false
           prerelease: false

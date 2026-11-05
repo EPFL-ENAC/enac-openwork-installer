@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# EPFL OpenWork terminal installer for Linux and macOS.
+# OpenWork terminal installer for Linux and macOS.
 # Same flow as the GUI installer: prerequisites, OpenWork, EPFL portal
 # sign-in, RCP API key, provider configuration, smoke test.
 # https://github.com/EPFL-ENAC/enac-openwork-installer
@@ -1388,7 +1388,7 @@ main() {
     trap cleanup EXIT
     trap 'exit 130' INT
 
-    say "EPFL OpenWork terminal installer ($(date -u '+%Y-%m-%dT%H:%M:%SZ'))"
+    say "OpenWork terminal installer ($(date -u '+%Y-%m-%dT%H:%M:%SZ'))"
     step "[1/5] Checking prerequisites and network"
     check_prereqs
     check_network

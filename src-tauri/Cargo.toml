@@ -1,7 +1,7 @@
 [package]
 name = "epfl-openwork-installer"
 version = "0.1.0"
-description = "EPFL OpenWork Installer"
+description = "OpenWork Installer"
 edition = "2021"
 rust-version = "1.90"
 

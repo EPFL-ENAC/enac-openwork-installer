@@ -9,10 +9,10 @@ const { fileURLToPath } = await import(/* @vite-ignore */ specifier)
 const PAGE = fileURLToPath(new URL('../pages/index.html', import.meta.url))
 
 const ASSETS = [
-  'EPFL OpenWork Installer_0.1.0_aarch64.AppImage',
-  'EPFL OpenWork Installer_0.1.0_amd64.AppImage',
-  'EPFL OpenWork Installer_0.1.0_universal.dmg',
-  'EPFL OpenWork Installer_0.1.0_x64.exe',
+  'OpenWork Installer_0.1.0_aarch64.AppImage',
+  'OpenWork Installer_0.1.0_amd64.AppImage',
+  'OpenWork Installer_0.1.0_universal.dmg',
+  'OpenWork Installer_0.1.0_x64.exe',
   'install.sh',
   'SHA256SUMS',
 ]
@@ -22,19 +22,19 @@ const page = readFileSync(PAGE, 'utf8')
 describe('pickAssets', () => {
   it('maps every platform role to the matching release asset', () => {
     expect(pickAssets(ASSETS)).toEqual({
-      windows: 'EPFL OpenWork Installer_0.1.0_x64.exe',
-      macos: 'EPFL OpenWork Installer_0.1.0_universal.dmg',
-      'linux-x64': 'EPFL OpenWork Installer_0.1.0_amd64.AppImage',
-      'linux-arm64': 'EPFL OpenWork Installer_0.1.0_aarch64.AppImage',
+      windows: 'OpenWork Installer_0.1.0_x64.exe',
+      macos: 'OpenWork Installer_0.1.0_universal.dmg',
+      'linux-x64': 'OpenWork Installer_0.1.0_amd64.AppImage',
+      'linux-arm64': 'OpenWork Installer_0.1.0_aarch64.AppImage',
     })
   })
 
   it('takes the asset names, not the tag, as the version of the files', () => {
     const names = ASSETS.filter((name) => !name.endsWith('.exe')).concat(
-      'EPFL OpenWork Installer_0.9.9_x64.exe',
+      'OpenWork Installer_0.9.9_x64.exe',
     )
 
-    expect(pickAssets(names).windows).toBe('EPFL OpenWork Installer_0.9.9_x64.exe')
+    expect(pickAssets(names).windows).toBe('OpenWork Installer_0.9.9_x64.exe')
   })
 
   it('fails on a release without a linux x64 AppImage', () => {
@@ -44,7 +44,7 @@ describe('pickAssets', () => {
   })
 
   it('fails instead of guessing between two assets for one role', () => {
-    const names = [...ASSETS, 'EPFL OpenWork Installer_0.1.0_arm64.AppImage']
+    const names = [...ASSETS, 'OpenWork Installer_0.1.0_arm64.AppImage']
 
     expect(() => pickAssets(names)).toThrow(/linux-arm64/)
   })
@@ -52,9 +52,9 @@ describe('pickAssets', () => {
 
 describe('assetUrl', () => {
   it('escapes the spaces of the product name', () => {
-    expect(assetUrl('EPFL OpenWork Installer_0.1.0_x64.exe')).toBe(
+    expect(assetUrl('OpenWork Installer_0.1.0_x64.exe')).toBe(
       'https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/' +
-        'EPFL%20OpenWork%20Installer_0.1.0_x64.exe',
+        'OpenWork%20Installer_0.1.0_x64.exe',
     )
   })
 })
@@ -69,10 +69,10 @@ describe('patchPage', () => {
     })
 
     expect(Object.fromEntries(hrefs)).toEqual({
-      windows: assetUrl('EPFL OpenWork Installer_0.1.0_x64.exe'),
-      macos: assetUrl('EPFL OpenWork Installer_0.1.0_universal.dmg'),
-      'linux-x64': assetUrl('EPFL OpenWork Installer_0.1.0_amd64.AppImage'),
-      'linux-arm64': assetUrl('EPFL OpenWork Installer_0.1.0_aarch64.AppImage'),
+      windows: assetUrl('OpenWork Installer_0.1.0_x64.exe'),
+      macos: assetUrl('OpenWork Installer_0.1.0_universal.dmg'),
+      'linux-x64': assetUrl('OpenWork Installer_0.1.0_amd64.AppImage'),
+      'linux-arm64': assetUrl('OpenWork Installer_0.1.0_aarch64.AppImage'),
     })
   })
 

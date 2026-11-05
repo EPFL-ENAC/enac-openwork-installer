@@ -1,4 +1,4 @@
-# EPFL OpenWork Installer
+# OpenWork Installer
 
 Desktop installer for OpenWork, with configuration to use EPFL RCP's AI as a Service (AIasS) inference, built with Tauri 2 and Vue 3.
 
@@ -49,7 +49,7 @@ Then make the file executable and run it:
 
 ```sh
 chmod +x ./*.AppImage
-./EPFL*.AppImage
+./OpenWork*.AppImage
 ```
 
 If FUSE is not available on the machine, run the AppImage with `--appimage-extract-and-run`. The arm64 build needs the same libraries.
