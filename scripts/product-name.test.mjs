@@ -46,10 +46,11 @@ const WIRE_SOURCES = [
   ['src-cli/install.sh', 'openwork-installer-cli'],
 ]
 
-const LEGACY_PATTERN = new RegExp(
-  ['EPFL', 'OpenWork', 'Installer'].join('(?:[\\s._-]|%20|%2520)*'),
-  'i',
-)
+const SEPARATOR = '(?:[\\s._-]|%20|%2520)*'
+
+const RETIRED_NAME = new RegExp(['EPFL', 'OpenWork'].join(SEPARATOR), 'i')
+
+const LEGACY_PATTERN = new RegExp(['EPFL', 'OpenWork', 'Installer'].join(SEPARATOR), 'i')
 
 const sourceFiles = (dir) =>
   readdirSync(fileURLToPath(new URL(dir, ROOT)), { withFileTypes: true }).flatMap((entry) => {
@@ -62,8 +63,7 @@ describe('the product name', () => {
     const text = read(path)
 
     expect(text).toContain(wording)
-    expect(text).not.toMatch(/EPFL OpenWork/)
-    expect(text).not.toMatch(/EPFL%20OpenWork/)
+    expect(text).not.toMatch(RETIRED_NAME)
   })
 
   it.each([...SCANNED_ROOTS.flatMap(sourceFiles), ...SCANNED_FILES])(
