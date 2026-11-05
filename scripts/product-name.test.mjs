@@ -30,6 +30,16 @@ const LEGACY_NAME_SOURCES = [
   'src-tauri/fixtures/openwork-uninstall-entries.json',
 ]
 
+// Wire identifiers: the request headers and the temp-dir prefix drop the EPFL
+// prefix as well. The npm package name and the repository URLs are identifiers
+// rather than display strings, so they keep it.
+const WIRE_SOURCES = [
+  ['src-tauri/src/util.rs', 'OpenWork-Installer/'],
+  ['src-tauri/src/util.rs', 'openwork-installer-'],
+  ['src-tauri/src/portal.rs', 'openwork-installer/'],
+  ['src-cli/install.sh', 'openwork-installer-cli'],
+]
+
 describe('the product name', () => {
   it.each(NAME_SOURCES)('%s drops the EPFL prefix', (path, wording) => {
     const text = read(path)
@@ -41,5 +51,12 @@ describe('the product name', () => {
 
   it.each(LEGACY_NAME_SOURCES)('%s keeps the old name in its compatibility list', (path) => {
     expect(read(path)).toContain('EPFL OpenWork Installer')
+  })
+
+  it.each(WIRE_SOURCES)('%s carries %s without the EPFL prefix', (path, wording) => {
+    const text = read(path)
+
+    expect(text).toContain(wording)
+    expect(text).not.toMatch(/epfl-openwork-installer/i)
   })
 })

@@ -69,7 +69,7 @@ pub fn home_dir() -> Option<PathBuf> {
 }
 
 pub fn temp_dir(tag: &str) -> Result<PathBuf, AppError> {
-    let dir = std::env::temp_dir().join(format!("epfl-openwork-installer-{}-{tag}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("openwork-installer-{}-{tag}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir)
         .map_err(|e| AppError::io(format!("cannot create {}: {e}", dir.display())))?;
@@ -82,7 +82,7 @@ pub fn remove_dir(path: &Path) {
 
 pub fn client() -> Result<reqwest::Client, AppError> {
     reqwest::Client::builder()
-        .user_agent(concat!("EPFL-OpenWork-Installer/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("OpenWork-Installer/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(30))
         .build()
         .map_err(|e| AppError::network(format!("cannot create the HTTP client: {e}")))

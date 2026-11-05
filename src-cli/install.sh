@@ -25,7 +25,7 @@ PORTAL_KEYS_PAGE="$PORTAL_BASE/aiaas/keys"
 PORTAL_KEYS_API="$PORTAL_BASE/aiaas/api/v1/keys"
 PORTAL_NEW_KEY_MODAL="$PORTAL_BASE/aiaas/modal_key_new"
 PORTAL_SHOW_SECRET="$PORTAL_BASE/aiaas/showsecret"
-PORTAL_UA="epfl-openwork-installer-cli"
+PORTAL_UA="openwork-installer-cli"
 
 INSTALL_TIMEOUT=900
 SHORT_TIMEOUT=120

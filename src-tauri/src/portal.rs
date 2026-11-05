@@ -790,10 +790,7 @@ pub async fn portal_close<R: tauri::Runtime>(
 
 fn portal_client(redirect: reqwest::redirect::Policy) -> Result<reqwest::Client, AppError> {
     reqwest::Client::builder()
-        .user_agent(concat!(
-            "epfl-openwork-installer/",
-            env!("CARGO_PKG_VERSION")
-        ))
+        .user_agent(concat!("openwork-installer/", env!("CARGO_PKG_VERSION")))
         .redirect(redirect)
         // The portal is internal-only and can hang: bound every request so the
         // UI keeps control and can surface a typed network error.
