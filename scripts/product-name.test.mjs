@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 
 const specifier = 'node:url'
 const { fileURLToPath } = await import(/* @vite-ignore */ specifier)
@@ -23,12 +23,18 @@ const NAME_SOURCES = [
   ['src-cli/install.sh', 'OpenWork terminal installer'],
 ]
 
-// Files that keep the historical names on purpose: repair and rerun must still
-// find an install that an older build registered.
-const LEGACY_NAME_SOURCES = [
-  'src-tauri/src/openwork.rs',
-  'src-tauri/fixtures/openwork-uninstall-entries.json',
+// Every surface that ships with the product, scanned for the retired name.
+const SCANNED_ROOTS = [
+  'src',
+  'src-tauri/src',
+  'src-tauri/fixtures',
+  'scripts',
+  'src-cli',
+  'pages',
+  '.github',
 ]
+
+const SCANNED_FILES = ['README.md', 'package.json', 'index.html']
 
 // Wire identifiers: the request headers and the temp-dir prefix drop the EPFL
 // prefix as well. The repository URLs are identifiers rather than display
@@ -40,7 +46,16 @@ const WIRE_SOURCES = [
   ['src-cli/install.sh', 'openwork-installer-cli'],
 ]
 
-const LEGACY_NAME = ['EPFL', 'OpenWork', 'Installer'].join(' ')
+const LEGACY_PATTERN = new RegExp(
+  ['EPFL', 'OpenWork', 'Installer'].join('(?:[\\s._-]|%20|%2520)*'),
+  'i',
+)
+
+const sourceFiles = (dir) =>
+  readdirSync(fileURLToPath(new URL(dir, ROOT)), { withFileTypes: true }).flatMap((entry) => {
+    const path = `${dir}/${entry.name}`
+    return entry.isDirectory() ? sourceFiles(path) : [path]
+  })
 
 describe('the product name', () => {
   it.each(NAME_SOURCES)('%s drops the EPFL prefix', (path, wording) => {
@@ -51,9 +66,17 @@ describe('the product name', () => {
     expect(text).not.toMatch(/EPFL%20OpenWork/)
   })
 
-  it.each(LEGACY_NAME_SOURCES)('%s keeps the old name in its compatibility list', (path) => {
-    expect(read(path)).toContain(LEGACY_NAME)
-  })
+  it.each([...SCANNED_ROOTS.flatMap(sourceFiles), ...SCANNED_FILES])(
+    '%s carries no retired product name',
+    (path) => {
+      const bytes = readFileSync(fileURLToPath(new URL(path, ROOT)))
+
+      if (bytes.includes(0)) {
+        return
+      }
+      expect(bytes.toString('utf8')).not.toMatch(LEGACY_PATTERN)
+    },
+  )
 
   it.each(WIRE_SOURCES)('%s carries %s without the EPFL prefix', (path, wording) => {
     const text = read(path)

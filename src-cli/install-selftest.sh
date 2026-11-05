@@ -656,7 +656,7 @@ assert_fail "failing engine is a failure" smoke_test
 
 # 29. prompts end their line: the masking filter is line oriented, so a
 # newline-less prompt stays in the sed buffer and the terminal shows nothing
-# until the next line lands (the #66 create-key stall).
+# until the next line lands.
 assert_eq "no inline read prompt left" "$(grep -c 'read -r -p' src-cli/install.sh || true)" "0"
 
 # 30. the create-key flow announces the POST and the read-back around them

@@ -310,8 +310,8 @@ fn normalized(value: &str) -> String {
 }
 
 /// Real OpenWork only: the exact product name from its own publisher. Our own
-/// entries ("OpenWork Installer", "EPFL OpenWork Installer") and any name that
-/// merely contains "openwork" fail the exact match, so they never count.
+/// "OpenWork Installer" entry and any name that merely contains "openwork" fail
+/// the exact match, so they never count.
 #[cfg(any(windows, test))]
 pub fn is_openwork_uninstall_entry(entry: &UninstallEntry) -> bool {
     if normalized(&entry.display_name) != OPENWORK_PRODUCT_NAME {
@@ -405,8 +405,7 @@ pub fn linux_appimage_path(home: &Path) -> PathBuf {
 
 /// Real OpenWork only: the managed AppImage, or an openwork.desktop entry that
 /// points at an existing AppImage. Our own entry carries a different file name
-/// ("OpenWork Installer.desktop" or the older "EPFL OpenWork Installer.desktop"),
-/// so it never counts.
+/// ("OpenWork Installer.desktop"), so it never counts.
 #[cfg(any(target_os = "linux", test))]
 pub fn linux_status_from(home: &Path) -> Option<InstallStatus> {
     let appimage = linux_appimage_path(home);
@@ -1660,18 +1659,16 @@ mod tests {
     fn never_detects_our_own_installer_as_openwork() {
         let programs = scratch("our-own-app");
         let own = write_exe(
-            &programs.join("EPFL OpenWork Installer"),
-            "EPFL OpenWork Installer.exe",
+            &programs.join("OpenWork Installer"),
+            "OpenWork Installer.exe",
         );
         let location = own.parent().unwrap().display().to_string();
-        for name in ["OpenWork Installer", "EPFL OpenWork Installer"] {
-            let entries = [uninstall(name, "EPFL", Some(&location))];
-            assert_eq!(
-                windows_status_from(Some(&programs), &entries),
-                None,
-                "{name} must not count as OpenWork"
-            );
-        }
+        let entries = [uninstall("OpenWork Installer", "EPFL", Some(&location))];
+        assert_eq!(
+            windows_status_from(Some(&programs), &entries),
+            None,
+            "OpenWork Installer must not count as OpenWork"
+        );
     }
 
     #[test]
@@ -1742,11 +1739,13 @@ mod tests {
 
     #[test]
     fn does_not_take_our_own_app_bundle_for_openwork() {
-        for name in ["OpenWork Installer", "EPFL OpenWork Installer"] {
-            let apps = scratch("our-app-bundle");
-            std::fs::create_dir_all(apps.join(format!("{name}.app")).join("Contents")).unwrap();
-            assert_eq!(macos_status_from(&apps), None, "{name}.app must not count");
-        }
+        let apps = scratch("our-app-bundle");
+        std::fs::create_dir_all(apps.join("OpenWork Installer.app").join("Contents")).unwrap();
+        assert_eq!(
+            macos_status_from(&apps),
+            None,
+            "OpenWork Installer.app must not count"
+        );
     }
 
     #[test]
@@ -1951,21 +1950,23 @@ mod tests {
 
     #[test]
     fn never_takes_our_own_installer_for_openwork_on_linux() {
-        for name in ["OpenWork Installer", "EPFL OpenWork Installer"] {
-            let home = scratch("our-own-linux");
-            let appimage = home.join("opt/openwork.AppImage");
-            write_exe(appimage.parent().unwrap(), "openwork.AppImage");
-            appimage_entry(&home, &format!("{name}.desktop"), &appimage);
-            assert_eq!(
-                linux_status_from(&home),
-                None,
-                "{name}.desktop must not count"
-            );
+        let home = scratch("our-own-linux");
+        let appimage = home.join("opt/openwork.AppImage");
+        write_exe(appimage.parent().unwrap(), "openwork.AppImage");
+        appimage_entry(&home, "OpenWork Installer.desktop", &appimage);
+        assert_eq!(
+            linux_status_from(&home),
+            None,
+            "OpenWork Installer.desktop must not count"
+        );
 
-            let own = write_exe(&home.join("opt"), name);
-            appimage_entry(&home, OPENWORK_DESKTOP_NAME, &own);
-            assert_eq!(linux_status_from(&home), None, "{name} must not count");
-        }
+        let own = write_exe(&home.join("opt"), "OpenWork Installer");
+        appimage_entry(&home, OPENWORK_DESKTOP_NAME, &own);
+        assert_eq!(
+            linux_status_from(&home),
+            None,
+            "OpenWork Installer must not count"
+        );
     }
 
     #[test]

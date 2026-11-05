@@ -7,13 +7,6 @@
     "expected": true
   },
   {
-    "displayName": "EPFL OpenWork Installer",
-    "publisher": "EPFL",
-    "installLocation": "C:\\Users\\tester\\AppData\\Local\\EPFL OpenWork Installer",
-    "version": "0.1.0",
-    "expected": false
-  },
-  {
     "displayName": "OpenWork Installer",
     "publisher": "EPFL",
     "installLocation": "C:\\Users\\tester\\AppData\\Local\\OpenWork Installer",
