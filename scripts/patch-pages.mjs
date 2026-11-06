@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Rewrites pages/index.html for GitHub Pages. The release asset names embed the
-// build version and the tag does not, so the deploy job takes the names from the
-// release metadata and patches them into the page it publishes.
+// Prepares pages/index.html for GitHub Pages. The page links the version-less
+// asset names, so the deploy only checks that every platform role resolves to
+// exactly one uploaded asset, that the page links it, and stamps the tag into
+// the version marker.
 //
 // Usage: node scripts/patch-pages.mjs <release.json> <page.html> [...]
 // release.json is the output of: gh release view <tag> --json tagName,assets
@@ -35,26 +36,25 @@ export function pickAssets(names) {
 }
 
 export function patchPage(html, { version, assets }) {
-  let patched = html
-
   for (const [role, name] of Object.entries(assets)) {
     const tag = new RegExp(`<a\\b[^>]*\\bdata-asset="${role}"[^>]*>`, 'g')
-    const found = patched.match(tag) ?? []
+    const found = html.match(tag) ?? []
     if (found.length !== 1) {
       throw new Error(`the page needs one download link for ${role}, found ${found.length}`)
     }
-    patched = patched.replace(tag, (anchor) =>
-      anchor.replace(/href="[^"]*"/, `href="${assetUrl(name)}"`),
-    )
+    const href = found[0].match(/href="([^"]*)"/)?.[1]
+    if (href !== assetUrl(name)) {
+      throw new Error(`the ${role} link points at ${href}, the release carries ${assetUrl(name)}`)
+    }
   }
 
   const marker = /(<[a-z]+[^>]*\bdata-release-version\b[^>]*>)[^<]*(<)/
-  const matches = patched.match(new RegExp(marker.source, 'g')) ?? []
+  const matches = html.match(new RegExp(marker.source, 'g')) ?? []
   if (matches.length !== 1) {
     throw new Error(`the page needs one data-release-version marker, found ${matches.length}`)
   }
 
-  return patched.replace(marker, `$1${version}$2`)
+  return html.replace(marker, `$1${version}$2`)
 }
 
 const main = async ([releasePath, ...pagePaths]) => {

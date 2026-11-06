@@ -95,8 +95,58 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "$GITHUB_REF_NAME" src-cli/install.sh --clobber --repo "$GITHUB_REPOSITORY"
 
-  checksums:
+  # Every release asset gets a version-less name, so
+  # releases/latest/download/<name> keeps working across releases.
+  stable-assets:
     needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Rename the release assets to version-less names
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          assets="$RUNNER_TEMP/assets"
+          mkdir -p "$assets"
+          gh release download "$GITHUB_REF_NAME" --dir "$assets" --clobber --repo "$GITHUB_REPOSITORY"
+          mapfile -t original < <(cd "$assets" && ls -1)
+
+          uploads=()
+          pick() {
+            local target="$1" pattern="$2"
+            local matches=()
+            while IFS= read -r name; do matches+=("$name"); done \
+              < <(printf '%s\n' "${original[@]}" | grep -Ei "$pattern" || true)
+            if [ "${#matches[@]}" -ne 1 ]; then
+              echo "::error::expected one asset matching $pattern, found ${#matches[@]}: ${matches[*]-}"
+              exit 1
+            fi
+            mv "$assets/${matches[0]}" "$assets/$target"
+            uploads+=("$assets/$target")
+          }
+
+          pick OpenWork-Installer-x64.exe '\.exe$'
+          pick OpenWork-Installer-universal.dmg '\.dmg$'
+          pick OpenWork-Installer-amd64.AppImage '_(amd64|x86_64|x64)\.AppImage$'
+          pick OpenWork-Installer-aarch64.AppImage '_(aarch64|arm64)\.AppImage$'
+
+          # Everything else is the versioned tauri-action name, the macOS
+          # updater archive nobody consumes, or a stale SHA256SUMS.
+          while IFS= read -r name; do
+            case "$name" in
+              install.sh | SHA256SUMS | OpenWork-Installer-*) continue ;;
+            esac
+            echo "removing $name from the release"
+            gh release delete-asset "$GITHUB_REF_NAME" "$name" --yes --repo "$GITHUB_REPOSITORY"
+          done < <(printf '%s\n' "${original[@]}")
+
+          gh release upload "$GITHUB_REF_NAME" "${uploads[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+
+  checksums:
+    needs: stable-assets
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -114,10 +164,10 @@ jobs:
           ( cd "$assets" && sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS" )
           gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/SHA256SUMS" --clobber --repo "$GITHUB_REPOSITORY"
 
-  # The asset names embed the build version and the tag does not, so the page is
-  # patched from the release metadata after every asset exists.
+  # The page carries the version-less asset links itself, so the deploy proves
+  # that every link matches the release and stamps the tag into the page.
   deploy-pages:
-    needs: [release, checksums]
+    needs: [stable-assets, checksums]
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -11,6 +11,19 @@ It does the following:
 
 ## Quick install
 
+### Downloads
+
+| Platform | Installer |
+| --- | --- |
+| Windows x64 | [OpenWork-Installer-x64.exe](https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/OpenWork-Installer-x64.exe) |
+| macOS universal (Apple silicon and Intel) | [OpenWork-Installer-universal.dmg](https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/OpenWork-Installer-universal.dmg) |
+| Linux x64 | [OpenWork-Installer-amd64.AppImage](https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/OpenWork-Installer-amd64.AppImage) |
+| Linux arm64 | [OpenWork-Installer-aarch64.AppImage](https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/OpenWork-Installer-aarch64.AppImage) |
+
+These links always point at the latest release. Check a download against [SHA256SUMS](https://github.com/EPFL-ENAC/enac-openwork-installer/releases/latest/download/SHA256SUMS), and find every release with its notes on the [releases page](https://github.com/EPFL-ENAC/enac-openwork-installer/releases).
+
+### Or install from a terminal
+
 The shell installer does everything the desktop installer does, from one command. It works on Linux x64 and arm64, and on macOS:
 
 ```sh
@@ -67,7 +80,7 @@ If FUSE is not available on the machine, run the AppImage with `--appimage-extra
    ```
 
 4. The `Release` workflow builds all four platforms and publishes the GitHub Release.
-5. After the workflow succeeds, verify that the release contains the portable `.exe`, the `.dmg`, the two `.AppImage` files, `install.sh` and `SHA256SUMS`.
+5. After the workflow succeeds, verify that the release contains the portable `.exe`, the `.dmg`, the two `.AppImage` files, `install.sh` and `SHA256SUMS`, all with their version-less name.
 6. The same workflow publishes the download page at https://epfl-enac.github.io/enac-openwork-installer/. Enable Pages once in the repository settings, with "GitHub Actions" as the source.
 
 
