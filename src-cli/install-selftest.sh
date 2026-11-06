@@ -537,6 +537,10 @@ assert_eq "big key list reused the OpenWork key" "$API_TOKEN" "sk-aaaa1111bbbb22
 # stays clean in this file too.
 assert_eq "no standalone install source left" "$(grep -E -c 'OPENCODE_(INSTALL|RELEASE)|opencode\.ai/(v2/install|update)' src-cli/install.sh || true)" "0"
 assert_eq "no standalone install helpers left" "$(grep -c 'install_opencode\|find_opencode\|oc_arch_name' src-cli/install.sh || true)" "0"
+# 26. curl | bash leaves BASH_SOURCE unset and puts the script itself on stdin,
+# so the entry guard must tolerate set -u and no prompt may read stdin directly.
+assert_eq "entry guard is set -u safe" "$(grep -c 'BASH_SOURCE\[0\]:-}' src-cli/install.sh)" "1"
+assert_eq "no prompt reads stdin directly" "$(grep -cE 'read -r( -t "[^"]+")? (reply|line)' src-cli/install.sh || true)" "0"
 assert_eq "five step labels" "$(grep -o '\[[0-9]/[0-9]\]' src-cli/install.sh | sort -u | paste -sd' ')" "[1/5] [2/5] [3/5] [4/5] [5/5]"
 assert_eq "config writer stays" "$(type -t write_opencode_config)" "function"
 assert_eq "config schema stays" "$OC_CONFIG_SCHEMA" "https://opencode.ai/config.json"

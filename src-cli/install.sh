@@ -62,6 +62,9 @@ OS=""
 ARCH=""
 CONFDIR=""
 LOG_FILE=""
+# Prompts read this fd. main() moves it to /dev/tty when stdin carries the
+# script instead of the terminal (curl | bash).
+TTY_FD=0
 STTY_SAVED=""
 SESSION_HEADER=""
 SESSION_CSRF=""
@@ -958,15 +961,15 @@ portal_login() {
     say "  2. paste a key secret shown on the portal keys page (it starts with sk-)."
     say "Polling every ${COOKIE_POLL_INTERVAL}s for up to ${LOGIN_TIMEOUT_SECS}s."
     say ""
-    STTY_SAVED=$(stty -g 2> /dev/null || true)
-    [[ -n $STTY_SAVED ]] && stty -echo 2> /dev/null || true
+    STTY_SAVED=$(stty -g <&"$TTY_FD" 2> /dev/null || true)
+    [[ -n $STTY_SAVED ]] && stty -echo <&"$TTY_FD" 2> /dev/null || true
     pending=""
     pending_ticks=0
     errs=0
     deadline=$((SECONDS + LOGIN_TIMEOUT_SECS))
     while ((SECONDS < deadline)); do
         line=""
-        if IFS= read -r -t "$COOKIE_POLL_INTERVAL" line; then
+        if IFS= read -r -t "$COOKIE_POLL_INTERVAL" -u "$TTY_FD" line; then
             line=${line#"${line%%[![:space:]]*}"}
             if [[ $line == *sk-* ]]; then
                 MANUAL_TOKEN=$(printf '%s' "$line" | grep -oE 'sk-[A-Za-z0-9_-]+' | head -1)
@@ -1032,14 +1035,14 @@ portal_login() {
 }
 
 __restore_tty() {
-    [[ -n $STTY_SAVED ]] && stty "$STTY_SAVED" 2> /dev/null || true
+    [[ -n $STTY_SAVED ]] && stty "$STTY_SAVED" <&"$TTY_FD" 2> /dev/null || true
     STTY_SAVED=""
 }
 
 ask_yn() {
     local reply=""
     printf '%s [Y/n]:\n' "$1" >&2
-    read -r reply || return 1
+    read -r -u "$TTY_FD" reply || return 1
     [[ -z $reply || $reply == [Yy]* ]]
 }
 
@@ -1227,7 +1230,7 @@ pick_numbered_list() {
     local reply choice=""
     while :; do
         printf 'select %s [%s]:\n' "$what" "$default" >&2
-        read -r reply || die "aborted"
+        read -r -u "$TTY_FD" reply || die "aborted"
         reply=${reply:-$default}
         if [[ $reply =~ ^[0-9]+$ ]] && ((reply >= 1 && reply <= n)); then
             break
@@ -1241,7 +1244,7 @@ pick_numbered_list() {
 ask_default_value() {
     local what=$1 default=$2 reply=""
     printf '%s [%s]:\n' "$what" "$default" >&2
-    read -r reply || die "aborted"
+    read -r -u "$TTY_FD" reply || die "aborted"
     reply=${reply#"${reply%%[![:space:]]*}"}
     reply=${reply%"${reply##*[![:space:]]}"}
     printf '%s\n' "${reply:-$default}"
@@ -1273,7 +1276,7 @@ rcp_key_step() {
         say "  n) create a new key"
         local reply
         printf 'select a key or n [new]:\n' >&2
-        read -r reply || die "aborted"
+        read -r -u "$TTY_FD" reply || die "aborted"
         if [[ $reply == [Nn]* ]]; then
             create_key_flow "$keys_json"
             reveal_secret "$REVEAL_KEY_ID"
@@ -1358,8 +1361,13 @@ main() {
     if [[ $# -gt 0 ]]; then
         die "this installer takes no arguments"
     fi
-    if [[ ! -t 0 ]]; then
-        printf 'This installer needs an interactive terminal (stdin is not a TTY).\n'
+    # A piped install (curl | bash) puts this script on stdin, so stdin cannot
+    # answer the prompts. fd 9 rather than {var}: macOS ships bash 3.2.
+    if [[ ! -t 0 ]] && { exec 9<> /dev/tty; } 2> /dev/null; then
+        TTY_FD=9
+    fi
+    if [[ ! -t $TTY_FD ]]; then
+        printf 'This installer needs an interactive terminal (no TTY available).\n'
         printf 'Run it with:\n  bash <(curl -fsSL %s)\n' "$INSTALL_URL"
         exit 1
     fi
@@ -1411,6 +1419,7 @@ cleanup() {
     sleep 0.2
 }
 
-if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+# BASH_SOURCE is unset when bash reads this file from a pipe or from -c.
+if [[ -z ${BASH_SOURCE[0]:-} || ${BASH_SOURCE[0]} == "$0" ]]; then
     main "$@"
 fi
